@@ -25,6 +25,7 @@ module patreon::content {
         ppv_price: u64,
         created_at: u64,
         content_type: String,
+        is_archived: bool,
     }
 
     /// One-time Purchase Access NFT
@@ -89,6 +90,7 @@ module patreon::content {
             ppv_price,
             created_at: clock::timestamp_ms(clock),
             content_type,
+            is_archived: false,
         };
 
         let content_id = object::id(&content);
@@ -205,6 +207,33 @@ module patreon::content {
         
         content.title = title;
         content.description = description;
+    }
+
+    /// Archive content (hide from public view)
+    public entry fun archive_content(
+        content: &mut ContentPost,
+        ctx: &TxContext
+    ) {
+        let sender = tx_context::sender(ctx);
+        assert!(sender == content.creator, ENotCreator);
+        
+        content.is_archived = true;
+    }
+
+    /// Unarchive content (restore to public view)
+    public entry fun unarchive_content(
+        content: &mut ContentPost,
+        ctx: &TxContext
+    ) {
+        let sender = tx_context::sender(ctx);
+        assert!(sender == content.creator, ENotCreator);
+        
+        content.is_archived = false;
+    }
+
+    /// Check if content is archived
+    public fun is_archived(content: &ContentPost): bool {
+        content.is_archived
     }
 }
 

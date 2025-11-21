@@ -47,9 +47,8 @@ export function ContentUploader({ profileId, tiers }: ContentUploaderProps) {
       const fileData = new Uint8Array(fileBuffer);
 
       // Step 2: Encrypt with Seal (if not public)
-      let encryptedData: Uint8Array = fileData;
+      let encryptedDataWithIV: Uint8Array = fileData;
       let policyId = "public";
-      let iv = new Uint8Array(12);
 
       if (!isPublic) {
         setProgress("Encrypting content...");
@@ -58,21 +57,22 @@ export function ContentUploader({ profileId, tiers }: ContentUploaderProps) {
           : sealService.createSubscriptionPolicy(account.address, selectedTier);
 
         const result = await sealService.encryptContent(fileData, policy);
-        encryptedData = new Uint8Array(result.encryptedData);
+        const encryptedData = new Uint8Array(result.encryptedData);
+        const iv = new Uint8Array(result.iv);
         policyId = result.policyId;
-        iv = new Uint8Array(result.iv);
+        
+        // Prepend IV to encrypted data (first 12 bytes = IV, rest = encrypted content)
+        // This allows anyone with access to decrypt without localStorage
+        encryptedDataWithIV = new Uint8Array(iv.length + encryptedData.length);
+        encryptedDataWithIV.set(iv, 0);
+        encryptedDataWithIV.set(encryptedData, iv.length);
       }
 
       // Step 3: Upload to Walrus
       setProgress("Uploading to Walrus...");
-      const blob = new Blob([new Uint8Array(encryptedData)]);
+      const blob = new Blob([new Uint8Array(encryptedDataWithIV)]);
       const uploadFile = new File([blob], file.name);
       const { blobId } = await walrusService.uploadFile(uploadFile);
-
-      // Step 4: Store IV with blob ID for decryption
-      if (!isPublic) {
-        localStorage.setItem(`iv_${blobId}`, Array.from(iv).join(","));
-      }
 
       // Step 5: Create on-chain record
       setProgress("Creating on-chain record...");

@@ -18,9 +18,10 @@ interface ContentViewerProps {
   };
   hasAccess: boolean;
   createdAt?: string;
+  compact?: boolean; // Thumbnail mode for dashboard
 }
 
-export function ContentViewer({ content, hasAccess, createdAt }: ContentViewerProps) {
+export function ContentViewer({ content, hasAccess, createdAt, compact = false }: ContentViewerProps) {
   const account = useCurrentAccount();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -49,15 +50,13 @@ export function ContentViewer({ content, hasAccess, createdAt }: ContentViewerPr
         setContentUrl(url);
       } else {
         // Encrypted content - decrypt first
-        const encryptedData = new Uint8Array(await blob.arrayBuffer());
+        const dataWithIV = new Uint8Array(await blob.arrayBuffer());
         
-        // Get IV from localStorage
-        const ivString = localStorage.getItem(`iv_${content.walrusBlobId}`);
-        if (!ivString) {
-          throw new Error("Decryption parameters not found");
-        }
+        // First 12 bytes are the IV, rest is encrypted data
+        const iv = dataWithIV.slice(0, 12);
+        const encryptedData = dataWithIV.slice(12);
         
-        const iv = new Uint8Array(ivString.split(",").map(Number));
+        console.log("Decrypting content with IV length:", iv.length, "Data length:", encryptedData.length);
         
         // Decrypt
         const decryptedData = await sealService.decryptContent(
@@ -182,25 +181,27 @@ export function ContentViewer({ content, hasAccess, createdAt }: ContentViewerPr
 
   return (
     <div className="bg-white">
-      {/* Header */}
-      <div className="p-6 border-b">
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex-1">
-            <h3 className="text-xl font-bold text-gray-900 mb-1">{content.title}</h3>
-            {createdAt && (
-              <p className="text-sm text-gray-500">{createdAt}</p>
+      {/* Header - Hidden in compact mode */}
+      {!compact && (
+        <div className="p-6 border-b">
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex-1">
+              <h3 className="text-xl font-bold text-gray-900 mb-1">{content.title}</h3>
+              {createdAt && (
+                <p className="text-sm text-gray-500">{createdAt}</p>
+              )}
+            </div>
+            {!content.isPublic && (
+              <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
+                Exclusive
+              </span>
             )}
           </div>
-          {!content.isPublic && (
-            <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
-              Exclusive
-            </span>
+          {content.description && (
+            <p className="text-gray-600 text-sm">{content.description}</p>
           )}
         </div>
-        {content.description && (
-          <p className="text-gray-600 text-sm">{content.description}</p>
-        )}
-      </div>
+      )}
       
       {/* Content */}
       <div className="bg-gray-900">
@@ -208,77 +209,88 @@ export function ContentViewer({ content, hasAccess, createdAt }: ContentViewerPr
           <img
             src={contentUrl}
             alt={content.title}
-            className="w-full max-h-[600px] object-contain"
+            className={compact ? "w-full h-48 object-cover" : "w-full max-h-[600px] object-contain"}
           />
         )}
         
         {content.contentType === "video" && (
           <video
             src={contentUrl}
-            controls
-            className="w-full max-h-[600px]"
+            controls={!compact}
+            className={compact ? "w-full h-48 object-cover" : "w-full max-h-[600px]"}
           />
         )}
         
         {content.contentType === "audio" && (
-          <div className="p-8">
-            <audio
-              src={contentUrl}
-              controls
-              className="w-full"
-            />
+          <div className={compact ? "p-4" : "p-8"}>
+            <div className="flex items-center justify-center h-full">
+              <svg className={`${compact ? 'w-12 h-12' : 'w-16 h-16'} text-white mb-2`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+              </svg>
+            </div>
+            {!compact && (
+              <audio
+                src={contentUrl}
+                controls
+                className="w-full"
+              />
+            )}
           </div>
         )}
         
         {(content.contentType === "file" || content.contentType === "media") && (
-          <div className="p-12 text-center">
-            <div className="bg-white rounded-lg inline-block p-8">
-              <svg className="w-16 h-16 text-blue-600 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className={compact ? "p-4 text-center" : "p-12 text-center"}>
+            <div className="bg-white rounded-lg inline-block p-4">
+              <svg className={`${compact ? 'w-8 h-8' : 'w-16 h-16'} text-blue-600 mx-auto mb-2`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
               </svg>
-              <a
-                href={contentUrl}
-                download={content.title}
-                className="inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-semibold transition"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Download File
-              </a>
+              {!compact && (
+                <a
+                  href={contentUrl}
+                  download={content.title}
+                  className="inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-semibold transition"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  Download File
+                </a>
+              )}
             </div>
           </div>
         )}
       </div>
 
-      {/* Actions */}
-      <div className="px-6 py-4 border-t flex items-center justify-between">
-        <div className="flex items-center gap-6">
-          <button 
-            onClick={handleLike}
-            className={`flex items-center gap-2 transition ${
-              isLiked ? 'text-red-600' : 'text-gray-600 hover:text-red-600'
-            }`}
-          >
-            <svg className={`w-5 h-5 ${isLiked ? 'fill-current' : ''}`} fill={isLiked ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-            </svg>
-            <span className="text-sm font-medium">{likes}</span>
-          </button>
-          <button className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition">
+      {/* Actions - Hidden in compact mode */}
+      {!compact && (
+        <div className="px-6 py-4 border-t flex items-center justify-between">
+          <div className="flex items-center gap-6">
+            <button 
+              onClick={handleLike}
+              className={`flex items-center gap-2 transition ${
+                isLiked ? 'text-red-600' : 'text-gray-600 hover:text-red-600'
+              }`}
+            >
+              <svg className={`w-5 h-5 ${isLiked ? 'fill-current' : ''}`} fill={isLiked ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+              </svg>
+              <span className="text-sm font-medium">{likes}</span>
+            </button>
+            <button className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+              </svg>
+              <span className="text-sm font-medium">{comments}</span>
+            </button>
+          </div>
+          <button onClick={handleShare} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
             </svg>
-            <span className="text-sm font-medium">{comments}</span>
+            <span className="text-sm font-medium">Share</span>
           </button>
         </div>
-        <button onClick={handleShare} className="flex items-center gap-2 text-gray-600 hover:text-gray-900 transition">
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-          </svg>
-          <span className="text-sm font-medium">Share</span>
-        </button>
-      </div>
+      )}
     </div>
   );
 }

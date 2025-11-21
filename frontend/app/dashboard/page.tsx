@@ -28,6 +28,7 @@ export default function Dashboard() {
     seal_policy_id: string;
     description: string;
     content_type: string;
+    is_archived: boolean;
   }>>([]);
   
   // Form states
@@ -37,6 +38,25 @@ export default function Dashboard() {
   const [tierDescription, setTierDescription] = useState("");
   const [tierPrice, setTierPrice] = useState("");
   const [maxSubscribers, setMaxSubscribers] = useState("100");
+  
+  // Edit/Delete modal states
+  const [editingContent, setEditingContent] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [isUpdating, setIsUpdating] = useState(false);
+  
+  // Archive/Unarchive states
+  const [showArchived, setShowArchived] = useState(false);
+  const [archivedContent, setArchivedContent] = useState<Array<{
+    content_id: string;
+    title: string;
+    is_public: boolean;
+    walrus_blob_id: string;
+    seal_policy_id: string;
+    description: string;
+    content_type: string;
+    is_archived: boolean;
+  }>>([]);
 
   // Auto-fetch creator profile on mount
   useEffect(() => {
@@ -123,6 +143,7 @@ export default function Dashboard() {
               seal_policy_id: fields.seal_policy_id || "",
               description: fields.description || "",
               content_type: fields.content_type || "media",
+              is_archived: fields.is_archived || false,
             };
           } catch (error) {
             console.error(`Error fetching content ${data.content_id}:`, error);
@@ -134,13 +155,20 @@ export default function Dashboard() {
               seal_policy_id: "",
               description: "",
               content_type: "media",
+              is_archived: false,
             };
           }
         })
       );
 
-      setMyContent(userContentWithDetails);
-      console.log("Found content:", userContentWithDetails);
+      // Separate active and archived content
+      const activeContent = userContentWithDetails.filter(c => !c.is_archived);
+      const archivedContentList = userContentWithDetails.filter(c => c.is_archived);
+      
+      setMyContent(activeContent);
+      setArchivedContent(archivedContentList);
+      console.log("Found active content:", activeContent);
+      console.log("Found archived content:", archivedContentList);
     } catch (error) {
       console.error("Error fetching content:", error);
     }
@@ -278,6 +306,143 @@ export default function Dashboard() {
       alert(`Tier creation failed: ${error}`);
     } finally {
       setCreatingTier(false);
+    }
+  };
+
+  const handleEditContent = (content: typeof myContent[0]) => {
+    setEditingContent(content.content_id);
+    setEditTitle(content.title);
+    setEditDescription(content.description);
+  };
+
+  const handleUpdateContent = async () => {
+    if (!editingContent || !editTitle || !editDescription) {
+      alert("Please fill in all fields");
+      return;
+    }
+
+    setIsUpdating(true);
+    try {
+      const tx = new Transaction();
+      
+      tx.moveCall({
+        target: `${PACKAGE_ID}::content::update_content`,
+        arguments: [
+          tx.object(editingContent),
+          tx.pure.string(editTitle),
+          tx.pure.string(editDescription),
+        ],
+      });
+
+      signAndExecute(
+        { transaction: tx },
+        {
+          onSuccess: async (result: any) => {
+            console.log("Content updated:", result);
+            alert("Content updated successfully! ✅");
+            
+            // Re-fetch content
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            await fetchMyContent();
+            
+            // Close modal
+            setEditingContent(null);
+            setEditTitle("");
+            setEditDescription("");
+          },
+          onError: (error) => {
+            console.error("Update failed:", error);
+            alert(`Update failed: ${error.message}`);
+          },
+        }
+      );
+    } catch (error) {
+      console.error("Update error:", error);
+      alert(`Update failed: ${error}`);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleArchiveContent = async (contentId: string) => {
+    if (!confirm("Archive this content? It will be hidden from your profile.")) {
+      return;
+    }
+
+    setIsUpdating(true);
+    try {
+      const tx = new Transaction();
+      
+      tx.moveCall({
+        target: `${PACKAGE_ID}::content::archive_content`,
+        arguments: [
+          tx.object(contentId),
+        ],
+      });
+
+      signAndExecute(
+        { transaction: tx },
+        {
+          onSuccess: async (result: any) => {
+            console.log("Content archived:", result);
+            alert("Content archived successfully! 📦");
+            
+            // Re-fetch content
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            await fetchMyContent();
+          },
+          onError: (error) => {
+            console.error("Archive failed:", error);
+            alert(`Archive failed: ${error.message}`);
+          },
+        }
+      );
+    } catch (error) {
+      console.error("Archive error:", error);
+      alert(`Archive failed: ${error}`);
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleUnarchiveContent = async (contentId: string) => {
+    if (!confirm("Restore this content? It will be visible again.")) {
+      return;
+    }
+
+    setIsUpdating(true);
+    try {
+      const tx = new Transaction();
+      
+      tx.moveCall({
+        target: `${PACKAGE_ID}::content::unarchive_content`,
+        arguments: [
+          tx.object(contentId),
+        ],
+      });
+
+      signAndExecute(
+        { transaction: tx },
+        {
+          onSuccess: async (result: any) => {
+            console.log("Content restored:", result);
+            alert("Content restored successfully! 🔄");
+            
+            // Re-fetch content
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            await fetchMyContent();
+          },
+          onError: (error) => {
+            console.error("Restore failed:", error);
+            alert(`Restore failed: ${error.message}`);
+          },
+        }
+      );
+    } catch (error) {
+      console.error("Restore error:", error);
+      alert(`Restore failed: ${error}`);
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -496,62 +661,256 @@ export default function Dashboard() {
 
               {/* My Content */}
               <div className="bg-white rounded-lg shadow-md p-6">
-                <h3 className="text-xl font-bold text-gray-900 mb-4">My Content</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold text-gray-900">My Content</h3>
+                  
+                  {/* Tab Switcher */}
+                  <div className="flex bg-gray-100 rounded-lg p-1">
+                    <button
+                      onClick={() => setShowArchived(false)}
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition ${
+                        !showArchived 
+                          ? 'bg-white text-blue-600 shadow-sm' 
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      📁 Active ({myContent.length})
+                    </button>
+                    <button
+                      onClick={() => setShowArchived(true)}
+                      className={`px-4 py-2 rounded-md text-sm font-medium transition ${
+                        showArchived 
+                          ? 'bg-white text-blue-600 shadow-sm' 
+                          : 'text-gray-600 hover:text-gray-900'
+                      }`}
+                    >
+                      📦 Archived ({archivedContent.length})
+                    </button>
+                  </div>
+                </div>
                 
-                {myContent.length === 0 ? (
-                  <p className="text-gray-600 text-center py-8">
-                    No content uploaded yet. Create some content above! 📝
-                  </p>
-                ) : (
-                  <div className="space-y-6">
+                {/* Active Content */}
+                {!showArchived && (
+                  <>
+                    {myContent.length === 0 ? (
+                      <p className="text-gray-600 text-center py-8">
+                        No active content. Create some content above! 📝
+                      </p>
+                    ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {myContent.map((content) => (
                       <div
                         key={content.content_id}
-                        className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow"
+                        className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition-shadow bg-white"
                       >
-                        <ContentViewer
-                          content={{
-                            id: content.content_id,
-                            title: content.title,
-                            description: content.description,
-                            walrusBlobId: content.walrus_blob_id,
-                            sealPolicyId: content.seal_policy_id,
-                            isPublic: content.is_public,
-                            contentType: content.content_type,
-                            creator: account?.address || "",
-                          }}
-                          hasAccess={true} // Creator always has access to their own content
-                        />
-                        <div className="p-4 bg-gray-50 border-t flex justify-between items-center">
-                          <div className="flex items-center gap-3">
-                            <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                        {/* Thumbnail Preview */}
+                        <div className="relative bg-gray-100 overflow-hidden">
+                          <ContentViewer
+                            content={{
+                              id: content.content_id,
+                              title: content.title,
+                              description: content.description,
+                              walrusBlobId: content.walrus_blob_id,
+                              sealPolicyId: content.seal_policy_id,
+                              isPublic: content.is_public,
+                              contentType: content.content_type,
+                              creator: account?.address || "",
+                            }}
+                            hasAccess={true}
+                            compact={true}
+                          />
+                          <div className="absolute top-2 right-2">
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                               content.is_public 
                                 ? 'bg-green-100 text-green-800' 
                                 : 'bg-blue-100 text-blue-800'
                             }`}>
-                              {content.is_public ? '🌐 Public' : '🔒 Subscribers Only'}
+                              {content.is_public ? '🌐' : '🔒'}
                             </span>
                           </div>
-                          <a
-                            href={`https://suiscan.xyz/testnet/object/${content.content_id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center gap-1"
-                          >
-                            View on Sui
-                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                            </svg>
-                          </a>
+                        </div>
+
+                        {/* Content Info */}
+                        <div className="p-4">
+                          <h4 className="font-semibold text-gray-900 mb-1 truncate">{content.title}</h4>
+                          {content.description && (
+                            <p className="text-sm text-gray-600 line-clamp-2 mb-3">{content.description}</p>
+                          )}
+                          
+                          {/* Actions */}
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleEditContent(content)}
+                              className="flex-1 px-3 py-1.5 text-sm bg-blue-50 text-blue-700 rounded hover:bg-blue-100 transition font-medium"
+                            >
+                              ✏️ Edit
+                            </button>
+                            <button
+                              onClick={() => handleArchiveContent(content.content_id)}
+                              className="flex-1 px-3 py-1.5 text-sm bg-red-50 text-red-700 rounded hover:bg-red-100 transition font-medium"
+                            >
+                              📦 Archive
+                            </button>
+                            <a
+                              href={`https://suiscan.xyz/testnet/object/${content.content_id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3 py-1.5 text-sm bg-gray-50 text-gray-700 rounded hover:bg-gray-100 transition"
+                              title="View on Sui"
+                            >
+                              🔗
+                            </a>
+                          </div>
                         </div>
                       </div>
                     ))}
                   </div>
+                    )}
+                  </>
+                )}
+
+                {/* Archived Content */}
+                {showArchived && (
+                  <>
+                    {archivedContent.length === 0 ? (
+                      <p className="text-gray-600 text-center py-8">
+                        No archived content. Archive some content to see them here! 📦
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {archivedContent.map((content) => (
+                          <div
+                            key={content.content_id}
+                            className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition-shadow bg-white opacity-75"
+                          >
+                            {/* Thumbnail Preview */}
+                            <div className="relative bg-gray-100 overflow-hidden">
+                              <ContentViewer
+                                content={{
+                                  id: content.content_id,
+                                  title: content.title,
+                                  description: content.description,
+                                  walrusBlobId: content.walrus_blob_id,
+                                  sealPolicyId: content.seal_policy_id,
+                                  isPublic: content.is_public,
+                                  contentType: content.content_type,
+                                  creator: account?.address || "",
+                                }}
+                                hasAccess={true}
+                                compact={true}
+                              />
+                              <div className="absolute top-2 right-2">
+                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                  📦 Archived
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Content Info */}
+                            <div className="p-4">
+                              <h4 className="font-semibold text-gray-900 mb-1 truncate">{content.title}</h4>
+                              {content.description && (
+                                <p className="text-sm text-gray-600 line-clamp-2 mb-3">{content.description}</p>
+                              )}
+                              
+                              {/* Archived Actions */}
+                              <div className="flex items-center gap-2">
+                                <button
+                                  onClick={() => handleUnarchiveContent(content.content_id)}
+                                  disabled={isUpdating}
+                                  className="flex-1 px-3 py-1.5 text-sm bg-green-50 text-green-700 rounded hover:bg-green-100 transition font-medium disabled:opacity-50"
+                                >
+                                  🔄 Restore
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (confirm("Permanently delete this content? This cannot be undone!")) {
+                                      alert("Permanent delete not implemented yet. Use archive for now.");
+                                    }
+                                  }}
+                                  className="flex-1 px-3 py-1.5 text-sm bg-red-50 text-red-700 rounded hover:bg-red-100 transition font-medium"
+                                >
+                                  🗑️ Delete
+                                </button>
+                                <a
+                                  href={`https://suiscan.xyz/testnet/object/${content.content_id}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-3 py-1.5 text-sm bg-gray-50 text-gray-700 rounded hover:bg-gray-100 transition"
+                                  title="View on Sui"
+                                >
+                                  🔗
+                                </a>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
           )}
         </div>
+
+        {/* Edit Modal */}
+        {editingContent && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg max-w-md w-full p-6">
+              <h3 className="text-xl font-bold text-gray-900 mb-4">Edit Content</h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Title
+                  </label>
+                  <input
+                    type="text"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-gray-900"
+                    placeholder="Content title"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Description
+                  </label>
+                  <textarea
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-gray-900 resize-none"
+                    placeholder="Content description"
+                    rows={4}
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={() => {
+                    setEditingContent(null);
+                    setEditTitle("");
+                    setEditDescription("");
+                  }}
+                  disabled={isUpdating}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdateContent}
+                  disabled={isUpdating || !editTitle || !editDescription}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 font-medium"
+                >
+                  {isUpdating ? "Updating..." : "Update"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
   );
 }

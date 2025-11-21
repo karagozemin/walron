@@ -27,7 +27,7 @@ A fully functional decentralized Patreon alternative built on the Sui Stack. Cre
 
 - **Frontend:** (Local deployment - ready for Vercel)
 - **Smart Contracts:** Deployed on Sui Testnet
-- **Package ID:** `0x82ab86dee8814eeae26b76d33cd7ddacc280794a0596f6e82939451052ac02b3`
+- **Package ID:** `0x36301f380025b7439af5472fc7b90156793cb25e67154c0d2207f506161bad8a`
 
 ### Demo Credentials
 
