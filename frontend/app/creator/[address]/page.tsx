@@ -93,21 +93,25 @@ export default function CreatorProfile({
         limit: 50,
       });
 
-      const creatorTiers = tierEvents.data
+      // Remove duplicates by tier_id
+      const uniqueTiers = new Map();
+      tierEvents.data
         .filter((event: any) => event.parsedJson?.creator === address)
-        .map((event: any) => {
+        .forEach((event: any) => {
           const data = event.parsedJson;
-          return {
-            id: data.tier_id,
-            name: data.name,
-            description: data.description || "Subscription tier",
-            pricePerMonth: (parseInt(data.price) / 1e9).toString(),
-            currentSubscribers: 0,
-            maxSubscribers: parseInt(data.max_subscribers),
-          };
+          if (!uniqueTiers.has(data.tier_id)) {
+            uniqueTiers.set(data.tier_id, {
+              id: data.tier_id,
+              name: data.name,
+              description: data.description || "Subscription tier",
+              pricePerMonth: (parseInt(data.price) / 1e9).toString(),
+              currentSubscribers: 0,
+              maxSubscribers: parseInt(data.max_subscribers),
+            });
+          }
         });
 
-      setTiers(creatorTiers);
+      setTiers(Array.from(uniqueTiers.values()));
 
       // Fetch content
       const contentEvents = await suiClient.queryEvents({
