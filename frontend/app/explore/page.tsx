@@ -1,34 +1,84 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { WalletButton } from "@/components/auth/WalletButton";
+import { suiClient } from "@/lib/sui/client";
+import { PACKAGE_ID } from "@/lib/sui/config";
 
-// Mock data - in production, fetch from blockchain
-const mockCreators = [
-  {
-    address: "0x1234567890abcdef",
-    handle: "@artcreator",
-    bio: "Digital artist creating NFT art and tutorials",
-    subscribers: 156,
-    tierCount: 3,
-  },
-  {
-    address: "0xabcdef1234567890",
-    handle: "@musicproducer",
-    bio: "Music producer sharing beats and production tips",
-    subscribers: 89,
-    tierCount: 2,
-  },
-  {
-    address: "0x9876543210fedcba",
-    handle: "@devtutor",
-    bio: "Web3 developer teaching blockchain development",
-    subscribers: 234,
-    tierCount: 3,
-  },
-];
+interface Creator {
+  address: string;
+  handle: string;
+  bio: string;
+  profileId: string;
+  contentCount: number;
+}
 
 export default function Explore() {
+  const [creators, setCreators] = useState<Creator[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    fetchAllCreators();
+  }, []);
+
+  const fetchAllCreators = async () => {
+    setLoading(true);
+    try {
+      // Fetch all ProfileCreated events
+      const profileEvents = await suiClient.queryEvents({
+        query: {
+          MoveEventType: `${PACKAGE_ID}::creator_profile::ProfileCreated`,
+        },
+        limit: 50,
+        order: "descending",
+      });
+
+      // Fetch all ContentCreated events to count content per creator
+      const contentEvents = await suiClient.queryEvents({
+        query: {
+          MoveEventType: `${PACKAGE_ID}::content::ContentCreated`,
+        },
+        limit: 100,
+        order: "descending",
+      });
+
+      // Count content per creator
+      const contentCountMap: Record<string, number> = {};
+      contentEvents.data.forEach((event: any) => {
+        const creator = event.parsedJson?.creator;
+        if (creator) {
+          contentCountMap[creator] = (contentCountMap[creator] || 0) + 1;
+        }
+      });
+
+      // Map profiles to creators
+      const creatorsList: Creator[] = profileEvents.data.map((event: any) => {
+        const data = event.parsedJson;
+        return {
+          address: data.owner,
+          handle: data.handle || data.owner.slice(0, 8),
+          bio: data.bio || "Creator on Web3 Patreon",
+          profileId: data.profile_id,
+          contentCount: contentCountMap[data.owner] || 0,
+        };
+      });
+
+      setCreators(creatorsList);
+      console.log("Fetched creators:", creatorsList);
+    } catch (error) {
+      console.error("Error fetching creators:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredCreators = creators.filter(
+    (creator) =>
+      creator.handle.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      creator.bio.toLowerCase().includes(searchQuery.toLowerCase())
+  );
   return (
     <div className="min-h-screen bg-gray-50">
         {/* Header */}
@@ -64,74 +114,86 @@ export default function Explore() {
             <input
               type="text"
               placeholder="Search creators..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full max-w-2xl border border-gray-300 rounded-lg p-4 text-gray-900 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
             />
           </div>
 
-          {/* Creators Grid */}
-          <div className="grid md:grid-cols-3 gap-6">
-            {mockCreators.map((creator) => (
-              <Link
-                key={creator.address}
-                href={`/creator/${creator.address}`}
-                className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition"
+          {/* Loading State */}
+          {loading ? (
+            <div className="text-center py-12">
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              <p className="mt-4 text-gray-600">Loading creators...</p>
+            </div>
+          ) : filteredCreators.length === 0 ? (
+            <div className="text-center bg-white rounded-lg shadow-md p-12">
+              <svg
+                className="mx-auto h-16 w-16 text-gray-400 mb-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
               >
-                <div className="flex items-start gap-4 mb-4">
-                  <div className="w-16 h-16 bg-gray-300 rounded-full flex-shrink-0" />
-                  <div className="flex-grow">
-                    <h3 className="font-bold text-lg text-gray-900 mb-1">{creator.handle}</h3>
-                    <p className="text-sm text-gray-600 line-clamp-2">
-                      {creator.bio}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex gap-4 text-sm text-gray-600">
-                  <div>
-                    <span className="font-semibold text-gray-900">
-                      {creator.subscribers}
-                    </span>{" "}
-                    subscribers
-                  </div>
-                  <div>
-                    <span className="font-semibold text-gray-900">
-                      {creator.tierCount}
-                    </span>{" "}
-                    tiers
-                  </div>
-                </div>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                />
+              </svg>
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                {searchQuery ? "No creators found" : "No creators yet"}
+              </h3>
+              <p className="text-gray-600 mb-6">
+                {searchQuery
+                  ? "Try a different search term"
+                  : "Be the first creator on Web3 Patreon!"}
+              </p>
+              <Link
+                href="/dashboard"
+                className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition"
+              >
+                Start Creating
               </Link>
-            ))}
-          </div>
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-3 gap-6">
+              {filteredCreators.map((creator) => (
+                <Link
+                  key={creator.address}
+                  href={`/creator/${creator.address}`}
+                  className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition"
+                >
+                  <div className="flex items-start gap-4 mb-4">
+                    <div className="w-16 h-16 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold text-xl">
+                      {creator.handle[0].toUpperCase()}
+                    </div>
+                    <div className="flex-grow">
+                      <h3 className="font-bold text-lg text-gray-900 mb-1">
+                        @{creator.handle}
+                      </h3>
+                      <p className="text-sm text-gray-600 line-clamp-2">
+                        {creator.bio}
+                      </p>
+                    </div>
+                  </div>
 
-          {/* Empty State for Demo */}
-          <div className="mt-12 text-center bg-white rounded-lg shadow-md p-12">
-            <svg
-              className="mx-auto h-16 w-16 text-gray-400 mb-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-              />
-            </svg>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              More creators coming soon!
-            </h3>
-            <p className="text-gray-600 mb-6">
-              Be one of the first creators on Web3 Patreon
-            </p>
-            <Link
-              href="/dashboard"
-              className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition"
-            >
-              Start Creating
-            </Link>
-          </div>
+                  <div className="flex gap-4 text-sm text-gray-600">
+                    <div>
+                      <span className="font-semibold text-gray-900">
+                        {creator.contentCount}
+                      </span>{" "}
+                      posts
+                    </div>
+                    <div className="text-xs text-gray-500 truncate">
+                      {creator.address.slice(0, 6)}...{creator.address.slice(-4)}
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+
         </div>
       </div>
   );
