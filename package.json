@@ -1,0 +1,31 @@
+{
+  "name": "web3-patreon",
+  "version": "1.0.0",
+  "description": "Decentralized creator platform built on Sui Stack with Walrus and Seal",
+  "scripts": {
+    "dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "start": "cd frontend && npm start",
+    "lint": "cd frontend && npm run lint",
+    "contracts:build": "cd contracts && sui move build",
+    "contracts:test": "cd contracts && sui move test",
+    "contracts:deploy": "cd contracts && sui client publish --gas-budget 100000000"
+  },
+  "keywords": [
+    "sui",
+    "walrus",
+    "seal",
+    "web3",
+    "patreon",
+    "blockchain",
+    "decentralized",
+    "creator-economy"
+  ],
+  "author": "",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": ""
+  }
+}
+
