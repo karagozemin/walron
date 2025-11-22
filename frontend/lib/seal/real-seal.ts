@@ -27,6 +27,8 @@ const KEY_SERVER_CONFIGS = [
 ];
 
 const THRESHOLD = 1; // Need 1 out of 2 key servers (lower threshold for better performance)
+const ENCRYPTION_TIMEOUT = 300000; // 5 minutes for encryption (large files need time)
+const DECRYPTION_TIMEOUT = 120000; // 2 minutes for decryption
 
 export interface RealSealEncryptionResult {
   encryptedObject: Uint8Array;
@@ -55,7 +57,7 @@ export class RealSealService {
         suiClient: this.suiClient as any, // Type assertion for compatibility
         serverConfigs: KEY_SERVER_CONFIGS,
         verifyKeyServers: false, // Disable verification for faster initialization
-        timeout: 120000, // 120 second timeout (2 minutes) for large files
+        timeout: ENCRYPTION_TIMEOUT, // Long timeout for large file encryption
       };
 
       this.sealClient = new SealClient(options);

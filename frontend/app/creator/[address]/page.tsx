@@ -152,6 +152,9 @@ export default function CreatorProfile({
               encryptionKey: fields.encryption_key || "",
               sealPolicyId: fields.seal_policy_id || "",
               description: fields.description || "",
+              requiredTierId: fields.required_tier_id || "",
+              isPPV: fields.is_ppv || false,
+              ppvPrice: fields.ppv_price ? (parseInt(fields.ppv_price) / 1e9).toString() : "0",
             };
           } catch (error) {
             console.error(`Error fetching content object ${data.content_id}:`, error);

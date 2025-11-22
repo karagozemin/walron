@@ -52,71 +52,124 @@ export function ContentViewer({ content, hasAccess, createdAt, compact = false }
         const url = URL.createObjectURL(blob);
         setContentUrl(url);
       } else {
-        // Encrypted content - decrypt with REAL Seal SDK
+        // Encrypted content - decrypt with Real Seal SDK
         const encryptedObject = new Uint8Array(await blob.arrayBuffer());
         
-        console.log("Decrypting with Real Seal SDK...", {
+        console.log("🔓 Decrypting content with Real Seal SDK...", {
           encryptedSize: encryptedObject.length,
           hasAccess,
           policyId: content.sealPolicyId,
+          hasEncryptionKey: !!content.encryptionKey,
         });
         
+        if (!hasAccess) {
+          throw new Error("You don't have access to this content. Please subscribe first.");
+        }
+        
+        if (!content.encryptionKey) {
+          // Check if user is the creator
+          const isCreator = account?.address === content.creator;
+          const errorMsg = isCreator 
+            ? "⚠️ Encryption key missing. This content was uploaded with an older version and cannot be decrypted. Please re-upload this content."
+            : "🔒 This content cannot be decrypted (missing encryption key). Please contact the creator.";
+          throw new Error(errorMsg);
+        }
+        
+        // Extract symmetric key from on-chain storage
+        const keyData = atob(content.encryptionKey);
+        const parts = keyData.split(':');
+        
+        console.log("📦 Parsing encryption key:", {
+          partsCount: parts.length,
+          format: parts.length === 3 ? "Legacy (IV:policyId:key)" : parts.length === 2 ? "New (policyId:key)" : "Unknown",
+        });
+        
+        let symmetricKey: Uint8Array;
+        let nonce: Uint8Array;
+        let storedPolicyId: string;
+        
+        if (parts.length === 3) {
+          // Legacy format: IV:policyId:key (from old mock encryption)
+          const [ivStr, policyId, keyBytesStr] = parts;
+          nonce = new Uint8Array(ivStr.split(',').map(Number));
+          symmetricKey = new Uint8Array(keyBytesStr.split(',').map(Number));
+          storedPolicyId = policyId;
+          
+          console.log("📦 Using legacy format:", {
+            policyId: storedPolicyId,
+            nonceLength: nonce.length,
+            keyLength: symmetricKey.length,
+          });
+        } else if (parts.length === 2) {
+          // New format: policyId:key (from Real Seal)
+          const [policyId, keyBytesStr] = parts;
+          symmetricKey = new Uint8Array(keyBytesStr.split(',').map(Number));
+          storedPolicyId = policyId;
+          
+          // For Real Seal, nonce is embedded in the encrypted data (first 12 bytes)
+          nonce = encryptedObject.slice(0, 12);
+          
+          console.log("📦 Using new format:", {
+            policyId: storedPolicyId,
+            keyLength: symmetricKey.length,
+            nonceExtractedFromData: true,
+          });
+        } else {
+          throw new Error(`Invalid encryption key format (expected 2 or 3 parts, got ${parts.length})`);
+        }
+        
+        // Decrypt using the symmetric key (AES-GCM)
         try {
-          // Use REAL Seal SDK for decryption
-          const realSeal = getRealSealService(suiClient);
+          // Convert to proper Uint8Array for Web Crypto API
+          const keyBuffer = new Uint8Array(symmetricKey);
+          const nonceBuffer = new Uint8Array(nonce);
           
-          // Note: Real Seal requires txBytes and sessionKey for decryption
-          // For demo, we'll catch the error and fall back to mock
-          // In production, you'd create a transaction that proves subscription access
-          const dummyTxBytes = new Uint8Array([0]); // Placeholder
-          const dummySessionKey = null; // Placeholder
-          
-          const decryptedData = await realSeal.decryptContent(
-            encryptedObject,
-            dummyTxBytes,
-            dummySessionKey
+          // Import the symmetric key for AES-GCM decryption
+          const cryptoKey = await crypto.subtle.importKey(
+            "raw",
+            keyBuffer,
+            { name: "AES-GCM", length: 256 },
+            false,
+            ["decrypt"]
           );
           
-          console.log("✅ Real Seal decryption successful:", {
+          // Prepare ciphertext based on format
+          let ciphertext: Uint8Array;
+          if (parts.length === 3) {
+            // Legacy: IV was prepended to encrypted data, skip it
+            ciphertext = new Uint8Array(encryptedObject.slice(nonce.length));
+          } else {
+            // New: nonce is first 12 bytes, rest is ciphertext
+            ciphertext = new Uint8Array(encryptedObject.slice(12));
+          }
+          
+          console.log("🔑 Decrypting with AES-GCM...", {
+            nonceLength: nonceBuffer.length,
+            ciphertextLength: ciphertext.length,
+          });
+          
+          const decryptedBuffer = await crypto.subtle.decrypt(
+            {
+              name: "AES-GCM",
+              iv: nonceBuffer,
+            },
+            cryptoKey,
+            ciphertext.buffer as ArrayBuffer
+          );
+          
+          const decryptedData = new Uint8Array(decryptedBuffer);
+          
+          console.log("✅ Decryption successful!", {
             decryptedSize: decryptedData.length,
           });
           
-          // Create URL from decrypted data
-          const decryptedBlob = new Blob([new Uint8Array(decryptedData)]);
+          const decryptedBlob = new Blob([decryptedData]);
           const url = URL.createObjectURL(decryptedBlob);
           setContentUrl(url);
           
-        } catch (realSealError) {
-          console.error("Real Seal decryption failed, trying fallback:", realSealError);
-          
-          // Fallback to mock implementation
-          try {
-            // Check if this is mock-encrypted data (has IV prepended)
-            if (encryptedObject.length > 12) {
-              const iv = encryptedObject.slice(0, 12);
-              const encryptedData = encryptedObject.slice(12);
-              
-              const decryptedData = await sealService.decryptContent(
-                encryptedData,
-                content.sealPolicyId,
-                iv,
-                account?.address || "",
-                hasAccess,
-                content.encryptionKey
-              );
-              
-              const decryptedBlob = new Blob([new Uint8Array(decryptedData)]);
-              const url = URL.createObjectURL(decryptedBlob);
-              setContentUrl(url);
-              
-              console.log("✅ Fallback decryption successful");
-            } else {
-              throw new Error("Invalid encrypted data format");
-            }
-          } catch (fallbackError) {
-            console.error("Fallback decryption also failed:", fallbackError);
-            throw fallbackError;
-          }
+        } catch (decryptError) {
+          console.error("❌ Decryption failed:", decryptError);
+          throw new Error(`Decryption failed: ${decryptError instanceof Error ? decryptError.message : 'Unknown error'}`);
         }
       }
     } catch (err) {

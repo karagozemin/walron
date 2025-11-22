@@ -724,7 +724,7 @@ export default function Dashboard() {
                             hasAccess={true}
                             compact={true}
                           />
-                          <div className="absolute top-2 right-2">
+                          <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                               content.is_public 
                                 ? 'bg-green-100 text-green-800' 
@@ -732,6 +732,11 @@ export default function Dashboard() {
                             }`}>
                               {content.is_public ? '🌐' : '🔒'}
                             </span>
+                            {!content.is_public && !content.encryption_key && (
+                              <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                ⚠️ Key Missing
+                              </span>
+                            )}
                           </div>
                         </div>
 
@@ -740,6 +745,13 @@ export default function Dashboard() {
                           <h4 className="font-semibold text-gray-900 mb-1 truncate">{content.title}</h4>
                           {content.description && (
                             <p className="text-sm text-gray-600 line-clamp-2 mb-3">{content.description}</p>
+                          )}
+                          
+                          {/* Warning for missing encryption key */}
+                          {!content.is_public && !content.encryption_key && (
+                            <div className="mb-3 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+                              ⚠️ Encryption key missing. Re-upload recommended.
+                            </div>
                           )}
                           
                           {/* Actions */}
@@ -805,10 +817,15 @@ export default function Dashboard() {
                                 hasAccess={true}
                                 compact={true}
                               />
-                              <div className="absolute top-2 right-2">
+                              <div className="absolute top-2 right-2 flex flex-col gap-1 items-end">
                                 <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
                                   📦 Archived
                                 </span>
+                                {!content.is_public && !content.encryption_key && (
+                                  <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                    ⚠️ Key Missing
+                                  </span>
+                                )}
                               </div>
                             </div>
 

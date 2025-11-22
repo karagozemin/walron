@@ -66,51 +66,39 @@ export function ContentUploader({ profileId, tiers }: ContentUploaderProps) {
 
       if (!isPublic) {
         const fileSizeMB = (fileData.length / (1024 * 1024)).toFixed(2);
-        setProgress(`Encrypting with Seal SDK... (${fileSizeMB}MB - may take a moment)`);
+        setProgress(`Encrypting with Seal SDK... (${fileSizeMB}MB - this may take 1-3 minutes for large files)`);
         
-        try {
-          // Use REAL Seal SDK for encryption
-          const realSeal = getRealSealService(suiClient);
-          
-          // Identity is the tier ID (content is encrypted for specific tier subscribers)
-          const identity = selectedTier || `content_${Date.now()}`;
-          
-          const result = await realSeal.encryptContent(
-            fileData,
-            PACKAGE_ID, // Package ID as namespace
-            identity     // Tier ID as identity
-          );
-          
-          // Store encrypted object and symmetric key
-          encryptedDataWithIV = result.encryptedObject;
-          exportedKey = result.symmetricKey;
-          policyId = `seal_${result.id}`;
-          
-          console.log("✅ Real Seal encryption complete:", {
-            encryptedSize: encryptedDataWithIV.length,
-            keySize: exportedKey.length,
-            identity: result.id,
-          });
-          
-        } catch (error) {
-          console.error("Real Seal encryption failed, falling back to mock:", error);
-          
-          // Fallback to mock implementation if real Seal fails
-          const policy = isPPV
-            ? sealService.createPurchasePolicy(account.address, "temp_content_id")
-            : sealService.createSubscriptionPolicy(account.address, selectedTier);
-
-          const mockResult = await sealService.encryptContent(fileData, policy);
-          const encryptedData = new Uint8Array(mockResult.encryptedData);
-          const iv = new Uint8Array(mockResult.iv);
-          policyId = mockResult.policyId;
-          ivForKey = iv;
-          exportedKey = mockResult.exportedKey || null;
-          
-          encryptedDataWithIV = new Uint8Array(iv.length + encryptedData.length);
-          encryptedDataWithIV.set(iv, 0);
-          encryptedDataWithIV.set(encryptedData, iv.length);
-        }
+        // Use REAL Seal SDK for encryption
+        const realSeal = getRealSealService(suiClient);
+        
+        // Identity is the tier ID (content is encrypted for specific tier subscribers)
+        const identity = selectedTier || `content_${Date.now()}`;
+        
+        console.log("🔐 Starting Real Seal encryption...", {
+          fileSize: fileData.length,
+          identity,
+          packageId: PACKAGE_ID,
+        });
+        
+        const result = await realSeal.encryptContent(
+          fileData,
+          PACKAGE_ID, // Package ID as namespace
+          identity     // Tier ID as identity
+        );
+        
+        // Store encrypted object and symmetric key
+        encryptedDataWithIV = result.encryptedObject;
+        exportedKey = result.symmetricKey;
+        policyId = `seal_${result.id}`;
+        
+        // For Real Seal, we need to store the encrypted object directly
+        // The symmetric key is stored on-chain for access control
+        console.log("✅ Real Seal encryption complete:", {
+          encryptedSize: encryptedDataWithIV.length,
+          keySize: exportedKey.length,
+          identity: result.id,
+          policyId,
+        });
       }
 
       // Step 3: Upload to Walrus
@@ -125,21 +113,24 @@ export function ContentUploader({ profileId, tiers }: ContentUploaderProps) {
       
       const clockObjectId = "0x6"; // Sui Clock object
       
-      // Convert encryption key to base64 for storage (IV + policyId + raw key bytes)
+      // Convert encryption key to base64 for storage
       let keyBase64 = "";
-      if (!isPublic && exportedKey && ivForKey) {
-        const keyString = Array.from(ivForKey).join(",") + ":" + 
-                         policyId + ":" + 
-                         Array.from(exportedKey).join(",");
+      if (!isPublic && exportedKey) {
+        // For Real Seal: store the symmetric key directly (no IV needed, it's in the encrypted object)
+        const keyString = policyId + ":" + Array.from(exportedKey).join(",");
         keyBase64 = btoa(keyString);
         console.log("Storing key to blockchain:", {
-          ivLength: ivForKey.length,
           keyLength: exportedKey.length,
           policyId,
           encodedLength: keyBase64.length,
           preview: keyString.substring(0, 100)
         });
       }
+      
+      // Convert PPV price from SUI to MIST (1 SUI = 1,000,000,000 MIST)
+      const ppvPriceMist = isPPV && ppvPrice 
+        ? BigInt(Math.floor(parseFloat(ppvPrice) * 1_000_000_000))
+        : BigInt(0);
       
       tx.moveCall({
         target: `${PACKAGE_ID}::content::create_content`,
@@ -152,7 +143,7 @@ export function ContentUploader({ profileId, tiers }: ContentUploaderProps) {
           tx.pure.id(selectedTier || "0x0"),
           tx.pure.bool(isPublic),
           tx.pure.bool(isPPV),
-          tx.pure.u64(isPPV ? BigInt(ppvPrice) * BigInt(1_000_000_000) : 0),
+          tx.pure.u64(ppvPriceMist),
           tx.pure.string(file.type.split("/")[0] || "file"),
           tx.pure.string(keyBase64), // Store encryption key on-chain
           tx.object(clockObjectId),
@@ -274,9 +265,14 @@ export function ContentUploader({ profileId, tiers }: ContentUploaderProps) {
                   onChange={(e) => setPpvPrice(e.target.value)}
                   className="w-full border border-gray-300 rounded p-2 text-gray-900 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
                   placeholder="0.5"
-                  step="0.1"
+                  step="0.01"
                   min="0"
                 />
+                {ppvPrice && parseFloat(ppvPrice) > 0 && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    = {(parseFloat(ppvPrice) * 1_000_000_000).toLocaleString()} MIST
+                  </p>
+                )}
               </div>
             ) : (
               <div>
