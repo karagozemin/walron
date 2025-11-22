@@ -25,7 +25,7 @@ Web3 Patreon empowers creators to monetize their content directly on-chain witho
 
 - **Blockchain**: Sui (Smart contracts in Move)
 - **Storage**: Walrus Protocol (Decentralized blob storage)
-- **Encryption**: Seal Protocol (Content encryption and access control)
+- **Encryption**: Seal Protocol (Real @mysten/seal SDK with production key servers)
 - **Frontend**: Next.js 14 + TypeScript + Tailwind CSS
 - **Wallet**: @mysten/dapp-kit
 

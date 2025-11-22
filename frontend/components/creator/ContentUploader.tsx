@@ -5,7 +5,9 @@ import { useCurrentAccount, useSignAndExecuteTransaction } from "@mysten/dapp-ki
 import { Transaction } from "@mysten/sui/transactions";
 import { walrusService } from "@/lib/walrus/client";
 import { sealService } from "@/lib/seal/encryption";
+import { getRealSealService } from "@/lib/seal/real-seal";
 import { PACKAGE_ID } from "@/lib/sui/config";
+import { suiClient } from "@/lib/sui/client";
 
 interface ContentUploaderProps {
   profileId: string;
@@ -53,23 +55,51 @@ export function ContentUploader({ profileId, tiers }: ContentUploaderProps) {
       let exportedKey: Uint8Array | null = null;
 
       if (!isPublic) {
-        setProgress("Encrypting content...");
-        const policy = isPPV
-          ? sealService.createPurchasePolicy(account.address, "temp_content_id")
-          : sealService.createSubscriptionPolicy(account.address, selectedTier);
-
-        const result = await sealService.encryptContent(fileData, policy);
-        const encryptedData = new Uint8Array(result.encryptedData);
-        const iv = new Uint8Array(result.iv);
-        policyId = result.policyId;
-        ivForKey = iv; // Store for later use
-        exportedKey = result.exportedKey || null;
+        setProgress("Encrypting with Seal SDK...");
         
-        // Prepend IV to encrypted data (first 12 bytes = IV, rest = encrypted content)
-        // This allows anyone with access to decrypt without localStorage
-        encryptedDataWithIV = new Uint8Array(iv.length + encryptedData.length);
-        encryptedDataWithIV.set(iv, 0);
-        encryptedDataWithIV.set(encryptedData, iv.length);
+        try {
+          // Use REAL Seal SDK for encryption
+          const realSeal = getRealSealService(suiClient);
+          
+          // Identity is the tier ID (content is encrypted for specific tier subscribers)
+          const identity = selectedTier || `content_${Date.now()}`;
+          
+          const result = await realSeal.encryptContent(
+            fileData,
+            PACKAGE_ID, // Package ID as namespace
+            identity     // Tier ID as identity
+          );
+          
+          // Store encrypted object and symmetric key
+          encryptedDataWithIV = result.encryptedObject;
+          exportedKey = result.symmetricKey;
+          policyId = `seal_${result.id}`;
+          
+          console.log("✅ Real Seal encryption complete:", {
+            encryptedSize: encryptedDataWithIV.length,
+            keySize: exportedKey.length,
+            identity: result.id,
+          });
+          
+        } catch (error) {
+          console.error("Real Seal encryption failed, falling back to mock:", error);
+          
+          // Fallback to mock implementation if real Seal fails
+          const policy = isPPV
+            ? sealService.createPurchasePolicy(account.address, "temp_content_id")
+            : sealService.createSubscriptionPolicy(account.address, selectedTier);
+
+          const mockResult = await sealService.encryptContent(fileData, policy);
+          const encryptedData = new Uint8Array(mockResult.encryptedData);
+          const iv = new Uint8Array(mockResult.iv);
+          policyId = mockResult.policyId;
+          ivForKey = iv;
+          exportedKey = mockResult.exportedKey || null;
+          
+          encryptedDataWithIV = new Uint8Array(iv.length + encryptedData.length);
+          encryptedDataWithIV.set(iv, 0);
+          encryptedDataWithIV.set(encryptedData, iv.length);
+        }
       }
 
       // Step 3: Upload to Walrus

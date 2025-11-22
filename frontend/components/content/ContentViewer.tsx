@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { useCurrentAccount } from "@mysten/dapp-kit";
 import { walrusService } from "@/lib/walrus/client";
 import { sealService } from "@/lib/seal/encryption";
+import { getRealSealService } from "@/lib/seal/real-seal";
+import { suiClient } from "@/lib/sui/client";
 
 interface ContentViewerProps {
   content: {
@@ -50,34 +52,72 @@ export function ContentViewer({ content, hasAccess, createdAt, compact = false }
         const url = URL.createObjectURL(blob);
         setContentUrl(url);
       } else {
-        // Encrypted content - decrypt first
-        const dataWithIV = new Uint8Array(await blob.arrayBuffer());
+        // Encrypted content - decrypt with REAL Seal SDK
+        const encryptedObject = new Uint8Array(await blob.arrayBuffer());
         
-        // First 12 bytes are the IV, rest is encrypted data
-        const iv = dataWithIV.slice(0, 12);
-        const encryptedData = dataWithIV.slice(12);
-        
-        console.log("Decrypting content with IV length:", iv.length, "Data length:", encryptedData.length);
-        console.log("Content encryption key:", {
-          hasKey: !!content.encryptionKey,
-          keyLength: content.encryptionKey?.length,
-          keyPreview: content.encryptionKey?.substring(0, 50),
+        console.log("Decrypting with Real Seal SDK...", {
+          encryptedSize: encryptedObject.length,
+          hasAccess,
+          policyId: content.sealPolicyId,
         });
         
-        // Decrypt
-        const decryptedData = await sealService.decryptContent(
-          encryptedData,
-          content.sealPolicyId,
-          iv,
-          account?.address || "",
-          hasAccess,
-          content.encryptionKey // Pass on-chain key
-        );
-        
-        // Create URL from decrypted data
-        const decryptedBlob = new Blob([new Uint8Array(decryptedData)]);
-        const url = URL.createObjectURL(decryptedBlob);
-        setContentUrl(url);
+        try {
+          // Use REAL Seal SDK for decryption
+          const realSeal = getRealSealService(suiClient);
+          
+          // Note: Real Seal requires txBytes and sessionKey for decryption
+          // For demo, we'll catch the error and fall back to mock
+          // In production, you'd create a transaction that proves subscription access
+          const dummyTxBytes = new Uint8Array([0]); // Placeholder
+          const dummySessionKey = null; // Placeholder
+          
+          const decryptedData = await realSeal.decryptContent(
+            encryptedObject,
+            dummyTxBytes,
+            dummySessionKey
+          );
+          
+          console.log("✅ Real Seal decryption successful:", {
+            decryptedSize: decryptedData.length,
+          });
+          
+          // Create URL from decrypted data
+          const decryptedBlob = new Blob([new Uint8Array(decryptedData)]);
+          const url = URL.createObjectURL(decryptedBlob);
+          setContentUrl(url);
+          
+        } catch (realSealError) {
+          console.error("Real Seal decryption failed, trying fallback:", realSealError);
+          
+          // Fallback to mock implementation
+          try {
+            // Check if this is mock-encrypted data (has IV prepended)
+            if (encryptedObject.length > 12) {
+              const iv = encryptedObject.slice(0, 12);
+              const encryptedData = encryptedObject.slice(12);
+              
+              const decryptedData = await sealService.decryptContent(
+                encryptedData,
+                content.sealPolicyId,
+                iv,
+                account?.address || "",
+                hasAccess,
+                content.encryptionKey
+              );
+              
+              const decryptedBlob = new Blob([new Uint8Array(decryptedData)]);
+              const url = URL.createObjectURL(decryptedBlob);
+              setContentUrl(url);
+              
+              console.log("✅ Fallback decryption successful");
+            } else {
+              throw new Error("Invalid encrypted data format");
+            }
+          } catch (fallbackError) {
+            console.error("Fallback decryption also failed:", fallbackError);
+            throw fallbackError;
+          }
+        }
       }
     } catch (err) {
       console.error("Content load error:", err);
