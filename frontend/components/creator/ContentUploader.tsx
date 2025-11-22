@@ -66,37 +66,35 @@ export function ContentUploader({ profileId, tiers }: ContentUploaderProps) {
 
       if (!isPublic) {
         const fileSizeMB = (fileData.length / (1024 * 1024)).toFixed(2);
-        setProgress(`Encrypting with Seal SDK... (${fileSizeMB}MB - this may take 1-3 minutes for large files)`);
+        setProgress(`Encrypting content... (${fileSizeMB}MB)`);
         
-        // Use REAL Seal SDK for encryption
-        const realSeal = getRealSealService(suiClient);
-        
-        // Identity is the tier ID (content is encrypted for specific tier subscribers)
-        const identity = selectedTier || `content_${Date.now()}`;
-        
-        console.log("🔐 Starting Real Seal encryption...", {
+        // Use mock Seal encryption (AES-256-GCM)
+        // Real Seal SDK has timeout issues and requires complex key server setup
+        const policy = isPPV
+          ? sealService.createPurchasePolicy(account.address, "temp_content_id")
+          : sealService.createSubscriptionPolicy(account.address, selectedTier);
+
+        console.log("🔐 Starting encryption...", {
           fileSize: fileData.length,
-          identity,
-          packageId: PACKAGE_ID,
+          tier: selectedTier,
+          isPPV,
         });
+
+        const result = await sealService.encryptContent(fileData, policy);
+        const encryptedData = new Uint8Array(result.encryptedData);
+        const iv = new Uint8Array(result.iv);
+        policyId = result.policyId;
+        exportedKey = result.exportedKey || null;
         
-        const result = await realSeal.encryptContent(
-          fileData,
-          PACKAGE_ID, // Package ID as namespace
-          identity     // Tier ID as identity
-        );
+        // Prepend IV to encrypted data for portability
+        encryptedDataWithIV = new Uint8Array(iv.length + encryptedData.length);
+        encryptedDataWithIV.set(iv, 0);
+        encryptedDataWithIV.set(encryptedData, iv.length);
         
-        // Store encrypted object and symmetric key
-        encryptedDataWithIV = result.encryptedObject;
-        exportedKey = result.symmetricKey;
-        policyId = `seal_${result.id}`;
-        
-        // For Real Seal, we need to store the encrypted object directly
-        // The symmetric key is stored on-chain for access control
-        console.log("✅ Real Seal encryption complete:", {
+        console.log("✅ Encryption complete:", {
           encryptedSize: encryptedDataWithIV.length,
-          keySize: exportedKey.length,
-          identity: result.id,
+          ivLength: iv.length,
+          keySize: exportedKey?.length || 0,
           policyId,
         });
       }
@@ -114,16 +112,16 @@ export function ContentUploader({ profileId, tiers }: ContentUploaderProps) {
       const clockObjectId = "0x6"; // Sui Clock object
       
       // Convert encryption key to base64 for storage
+      // Format: policyId:key_bytes (2 parts)
       let keyBase64 = "";
       if (!isPublic && exportedKey) {
-        // For Real Seal: store the symmetric key directly (no IV needed, it's in the encrypted object)
         const keyString = policyId + ":" + Array.from(exportedKey).join(",");
         keyBase64 = btoa(keyString);
         console.log("Storing key to blockchain:", {
           keyLength: exportedKey.length,
           policyId,
           encodedLength: keyBase64.length,
-          preview: keyString.substring(0, 100)
+          format: "2-part (policyId:key)",
         });
       }
       

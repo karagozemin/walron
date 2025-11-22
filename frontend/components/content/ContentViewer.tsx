@@ -107,25 +107,39 @@ export function ContentViewer({
           symmetricKey = new Uint8Array(keyBytesStr.split(',').map(Number));
           storedPolicyId = policyId;
           
-          console.log("📦 Using legacy format:", {
+          console.log("📦 Using legacy format (3 parts):", {
             policyId: storedPolicyId,
             nonceLength: nonce.length,
             keyLength: symmetricKey.length,
           });
         } else if (parts.length === 2) {
-          // New format: policyId:key (from Real Seal)
+          // 2-part format: could be either mock or Real Seal
+          // Check policy ID to determine which one
           const [policyId, keyBytesStr] = parts;
           symmetricKey = new Uint8Array(keyBytesStr.split(',').map(Number));
           storedPolicyId = policyId;
           
-          // For Real Seal, nonce is embedded in the encrypted data (first 12 bytes)
-          nonce = encryptedObject.slice(0, 12);
+          // Real Seal policy IDs start with "seal_0x" (full address format)
+          // Mock policy IDs start with "seal_policy_" (short format)
+          const isRealSeal = policyId.startsWith('seal_0x');
           
-          console.log("📦 Using new format:", {
-            policyId: storedPolicyId,
-            keyLength: symmetricKey.length,
-            nonceExtractedFromData: true,
-          });
+          if (isRealSeal) {
+            // Real Seal: nonce is embedded in encrypted data (first 12 bytes)
+            nonce = encryptedObject.slice(0, 12);
+            console.log("📦 Using Real Seal format:", {
+              policyId: storedPolicyId,
+              keyLength: symmetricKey.length,
+              nonceExtractedFromData: true,
+            });
+          } else {
+            // Mock format (2 parts): IV was prepended to data, extract it
+            nonce = encryptedObject.slice(0, 12);
+            console.log("📦 Using mock format (2 parts):", {
+              policyId: storedPolicyId,
+              keyLength: symmetricKey.length,
+              nonceExtractedFromData: true,
+            });
+          }
         } else {
           throw new Error(`Invalid encryption key format (expected 2 or 3 parts, got ${parts.length})`);
         }
@@ -145,15 +159,8 @@ export function ContentViewer({
             ["decrypt"]
           );
           
-          // Prepare ciphertext based on format
-          let ciphertext: Uint8Array;
-          if (parts.length === 3) {
-            // Legacy: IV was prepended to encrypted data, skip it
-            ciphertext = new Uint8Array(encryptedObject.slice(nonce.length));
-          } else {
-            // New: nonce is first 12 bytes, rest is ciphertext
-            ciphertext = new Uint8Array(encryptedObject.slice(12));
-          }
+          // Prepare ciphertext: skip the nonce (first 12 bytes) from encrypted data
+          const ciphertext = new Uint8Array(encryptedObject.slice(12));
           
           console.log("🔑 Decrypting with AES-GCM...", {
             nonceLength: nonceBuffer.length,
