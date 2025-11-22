@@ -89,13 +89,8 @@ function saveToStorage(
     };
     
     localStorage.setItem(STORAGE_KEY, JSON.stringify(cached));
-    console.log("💾 SessionKey params saved to localStorage", {
-      address,
-      packageId,
-      expiresAt: new Date(expiresAt).toLocaleTimeString(),
-    });
   } catch (error) {
-    console.error("Failed to save SessionKey to storage:", error);
+    console.error("Failed to save session:", error);
   }
 }
 
@@ -121,7 +116,7 @@ export async function getOrCreateSessionKey(
       const cached: CachedSession = JSON.parse(stored);
       if (cached.expiresAt > now && cached.address === address) {
         const remainingMin = Math.floor((cached.expiresAt - now) / 1000 / 60);
-        console.log(`♻️  Reusing in-memory SessionKey (${remainingMin} min remaining)`);
+        console.log(`♻️ Session active (${remainingMin} min remaining)`);
         return sessionKeyInstance;
       }
     }
@@ -129,7 +124,7 @@ export async function getOrCreateSessionKey(
   
   // If another content is already creating a SessionKey, wait for it
   if (creationPromise) {
-    console.log("⏳ Another SessionKey creation in progress, waiting...");
+    console.log("⏳ Waiting for session...");
     return await creationPromise;
   }
   
@@ -138,12 +133,15 @@ export async function getOrCreateSessionKey(
   // each time, and the old signature won't match the new message
   if (!sessionKeyInstance && typeof window !== 'undefined') {
     const stored = localStorage.getItem(STORAGE_KEY);
+    
     if (stored) {
       try {
         const cached: CachedSession = JSON.parse(stored);
+        
         if (cached.expiresAt > now && cached.address === address && cached.packageId === packageId) {
           // We have a valid cached session, but need to re-sign once after refresh
-          console.log("💾 Found cached SessionKey, re-signing after page refresh...");
+          // NOTE: This is a Seal SDK limitation - SessionKey can't be fully serialized
+          console.log("🔐 Session found - re-signing after page refresh (security requirement)");
           
           // Use the creation promise lock to prevent duplicate signs
           creationPromise = (async () => {
@@ -156,19 +154,19 @@ export async function getOrCreateSessionKey(
                 suiClient,
               });
               
-              // Re-sign with new personalMessage
-              const message = sessionKey.getPersonalMessage();
-              console.log("🖊️  Re-signing SessionKey after page refresh (once only)...");
-              const { signature } = await signPersonalMessage({ message });
-              sessionKey.setPersonalMessageSignature(signature);
-              
-              sessionKeyInstance = sessionKey;
-              const remainingMin = Math.floor((cached.expiresAt - now) / 1000 / 60);
-              
-              // Update storage with new signature
-              saveToStorage(sessionKey, cached.expiresAt, address, packageId, signature, message);
-              
-              console.log(`✅ SessionKey re-signed and restored (${remainingMin} min remaining)!`);
+            // Re-sign with new personalMessage
+            const message = sessionKey.getPersonalMessage();
+            console.log("🖊️ Requesting signature (required after refresh for security)...");
+            const { signature } = await signPersonalMessage({ message });
+            sessionKey.setPersonalMessageSignature(signature);
+            
+            sessionKeyInstance = sessionKey;
+            const remainingMin = Math.floor((cached.expiresAt - now) / 1000 / 60);
+            
+            // Update storage with new signature
+            saveToStorage(sessionKey, cached.expiresAt, address, packageId, signature, message);
+            
+            console.log(`✅ Session restored (valid for ${remainingMin} min)`);
               return sessionKeyInstance;
             } finally {
               creationPromise = null;
@@ -189,7 +187,7 @@ export async function getOrCreateSessionKey(
   }
   
   // Create new SessionKey with lock
-  console.log("🔑 Creating NEW Seal SessionKey (user will sign ONCE)...");
+  console.log("🔑 Creating new secure session...");
   
   creationPromise = (async () => {
     try {
@@ -201,7 +199,7 @@ export async function getOrCreateSessionKey(
       });
       
       const message = sessionKey.getPersonalMessage();
-      console.log("🖊️  Requesting user signature for SessionKey...");
+      console.log("🖊️ Requesting signature to create secure session (valid 28 min)...");
       const { signature } = await signPersonalMessage({ message });
       sessionKey.setPersonalMessageSignature(signature);
       
@@ -214,7 +212,7 @@ export async function getOrCreateSessionKey(
       // Store metadata in localStorage (for reconstruction after refresh)
       saveToStorage(sessionKey, expiresAt, address, packageId, signature, message);
       
-      console.log("✅ SessionKey created and cached (memory + localStorage) for 28 minutes!");
+      console.log("✅ Secure session created (28 min)");
       return sessionKey;
     } finally {
       // Release lock
@@ -236,6 +234,6 @@ export function clearSessionCache() {
     localStorage.removeItem(STORAGE_KEY);
   }
   
-  console.log("🗑️  SessionKey cache cleared (memory + localStorage)");
+  console.log("🗑️ Session cleared");
 }
 

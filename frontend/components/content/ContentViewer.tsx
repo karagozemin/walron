@@ -53,6 +53,7 @@ export function ContentViewer({
   const [likes, setLikes] = useState(Math.floor(Math.random() * 100)); // Mock data
   const [comments, setComments] = useState(Math.floor(Math.random() * 20)); // Mock data
   const [isLiked, setIsLiked] = useState(false);
+  const [showSessionInfo, setShowSessionInfo] = useState(false);
 
   useEffect(() => {
     if (hasAccess || content.isPublic) {
@@ -533,7 +534,10 @@ export function ContentViewer({
     return (
       <div className="bg-gray-50 rounded-lg p-8 text-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4" />
-        <p className="text-gray-600">Loading content...</p>
+        <p className="text-gray-600 font-medium">Loading secure content...</p>
+        <p className="text-gray-500 text-sm mt-2">
+          🔐 You may be asked to sign once per session for security
+        </p>
       </div>
     );
   }
