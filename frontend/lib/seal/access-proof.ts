@@ -196,6 +196,36 @@ export async function isSubscriptionActive(
 }
 
 /**
+ * Get subscription expiry timestamp
+ * Returns expiry timestamp in milliseconds, or null if not found
+ */
+export async function getSubscriptionExpiry(
+  suiClient: SuiClient,
+  subscriptionId: string
+): Promise<number | null> {
+  try {
+    const obj = await suiClient.getObject({
+      id: subscriptionId,
+      options: { showContent: true },
+    });
+
+    if (obj.data?.content?.dataType === "moveObject") {
+      const fields = obj.data.content.fields as any;
+      const expiresAt = parseInt(fields.expires_at);
+      
+      console.log(`📅 Subscription expires at: ${new Date(expiresAt).toLocaleString()}`);
+      
+      return expiresAt;
+    }
+
+    return null;
+  } catch (error) {
+    console.error("Error getting subscription expiry:", error);
+    return null;
+  }
+}
+
+/**
  * Finds creator's profile ID
  * 
  * @param suiClient - Sui client instance

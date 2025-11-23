@@ -11,6 +11,7 @@ import {
   createSubscriptionProof,
   createCreatorAccessProof,
   isSubscriptionActive,
+  getSubscriptionExpiry,
   findCreatorProfile
 } from "@/lib/seal/access-proof";
 import { getOrCreateSessionKey } from "@/lib/seal/session-cache";
@@ -165,12 +166,20 @@ export function ContentViewer({
               throw new Error("No active subscription. Please subscribe to this tier.");
             }
             
-            const isActive = await isSubscriptionActive(suiClient, subscriptionNFTId);
-            if (!isActive) {
-              throw new Error("Subscription expired. Please renew.");
+            // ✅ CHECK EXPIRY - Frontend-side validation
+            const subscriptionExpiry = await getSubscriptionExpiry(suiClient, subscriptionNFTId);
+            if (!subscriptionExpiry) {
+              throw new Error("Could not verify subscription expiry");
             }
             
-            console.log("✅ Subscription verified on-chain");
+            const now = Date.now();
+            if (now >= subscriptionExpiry) {
+              const expiredDate = new Date(subscriptionExpiry).toLocaleString();
+              throw new Error(`❌ Subscription expired on ${expiredDate}. Please renew to access this content.`);
+            }
+            
+            const daysRemaining = Math.ceil((subscriptionExpiry - now) / (1000 * 60 * 60 * 24));
+            console.log(`✅ Subscription active (${daysRemaining} days remaining)`);
           } else {
             console.log("👤 Creator has full access to own content");
           }
@@ -242,8 +251,20 @@ export function ContentViewer({
             
             const decryptedBlob = new Blob([new Uint8Array(decryptedData)], { type: content.contentType || 'application/octet-stream' });
             
+            // Fetch subscription expiry for cache sync (Real Seal path)
+            let subscriptionExpiresAt: number | undefined;
+            if (!isCreator && subscriptionNFTId) {
+              subscriptionExpiresAt = await getSubscriptionExpiry(suiClient, subscriptionNFTId) || undefined;
+            }
+            
             // Cache to IndexedDB for future loads (skip decrypt next time!)
-            await cacheDecryptedContent(content.id, decryptedBlob, content.requiredTierId).catch(err => {
+            // ✅ Cache expiry synced with subscription expiry
+            await cacheDecryptedContent(
+              content.id, 
+              decryptedBlob, 
+              content.requiredTierId,
+              subscriptionExpiresAt
+            ).catch(err => {
               console.warn("⚠️ Failed to cache content (non-fatal):", err);
             });
             
@@ -282,6 +303,8 @@ export function ContentViewer({
           
           // Check if user is the creator
           const isCreator = account?.address === content.creator;
+          let subscriptionNFTId: string | null = null; // Declare in outer scope for cache expiry
+          let subscriptionExpiry: number | null = null;
           
           // ACCESS CONTROL: Verify subscription or creator ownership
           if (!isCreator) {
@@ -291,7 +314,7 @@ export function ContentViewer({
               throw new Error("Missing required tier ID or user address");
             }
             
-            const subscriptionNFTId = await findUserSubscriptionForTier(
+            subscriptionNFTId = await findUserSubscriptionForTier(
               suiClient,
               account.address,
               content.requiredTierId
@@ -301,12 +324,20 @@ export function ContentViewer({
               throw new Error("No active subscription found. Please subscribe to this tier first.");
             }
             
-            const isActive = await isSubscriptionActive(suiClient, subscriptionNFTId);
-            if (!isActive) {
-              throw new Error("Your subscription has expired. Please renew to continue.");
+            // ✅ CHECK EXPIRY - Frontend-side validation (legacy path)
+            subscriptionExpiry = await getSubscriptionExpiry(suiClient, subscriptionNFTId);
+            if (!subscriptionExpiry) {
+              throw new Error("Could not verify subscription expiry");
             }
             
-            console.log("✅ Subscription verified on-chain");
+            const now = Date.now();
+            if (now >= subscriptionExpiry) {
+              const expiredDate = new Date(subscriptionExpiry).toLocaleString();
+              throw new Error(`❌ Subscription expired on ${expiredDate}. Please renew to access this content.`);
+            }
+            
+            const daysRemaining = Math.ceil((subscriptionExpiry - now) / (1000 * 60 * 60 * 24));
+            console.log(`✅ Subscription active (${daysRemaining} days remaining)`);
           } else {
             console.log("👤 Creator has full access to own content");
           }
@@ -398,7 +429,13 @@ export function ContentViewer({
           const decryptedBlob = new Blob([decryptedData.slice()], { type: content.contentType || 'application/octet-stream' });
           
           // Cache to IndexedDB for future loads
-          await cacheDecryptedContent(content.id, decryptedBlob, content.requiredTierId).catch(err => {
+          // ✅ Cache expiry synced with subscription expiry (already fetched above)
+          await cacheDecryptedContent(
+            content.id, 
+            decryptedBlob, 
+            content.requiredTierId,
+            subscriptionExpiry || undefined // Use the expiry we already fetched
+          ).catch(err => {
             console.warn("⚠️ Failed to cache content (non-fatal):", err);
           });
           
