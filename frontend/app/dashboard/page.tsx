@@ -39,6 +39,11 @@ export default function Dashboard() {
   const [bio, setBio] = useState("");
   const [userSuiNS, setUserSuiNS] = useState<string | null>(null);
   const [checkingSuiNS, setCheckingSuiNS] = useState(false);
+  const [profileImage, setProfileImage] = useState<File | null>(null);
+  const [bannerImage, setBannerImage] = useState<File | null>(null);
+  const [uploadingImages, setUploadingImages] = useState(false);
+  const [handleAvailable, setHandleAvailable] = useState<boolean | null>(null);
+  const [checkingHandle, setCheckingHandle] = useState(false);
   const [tierName, setTierName] = useState("");
   const [tierDescription, setTierDescription] = useState("");
   const [tierPrice, setTierPrice] = useState("");
@@ -69,6 +74,14 @@ export default function Dashboard() {
     encryption_key: string;
     required_tier_id: string;
   }>>([]);
+  
+  // Profile editing states
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [editHandle, setEditHandle] = useState("");
+  const [editBio, setEditBio] = useState("");
+  const [editProfileImage, setEditProfileImage] = useState<File | null>(null);
+  const [editBannerImage, setEditBannerImage] = useState<File | null>(null);
+  const [updatingProfile, setUpdatingProfile] = useState(false);
 
   // Auto-fetch creator profile on mount
   useEffect(() => {
@@ -92,12 +105,43 @@ export default function Dashboard() {
         const handleFromSuins = suinsName.replace('.sui', '');
         if (!handle || handle === '') {
           setHandle(handleFromSuins);
+          // Check if this handle is available
+          checkHandleAvailability(handleFromSuins);
         }
       }
     } catch (error) {
       console.error('Error checking SuiNS:', error);
     } finally {
       setCheckingSuiNS(false);
+    }
+  };
+
+  // Check if handle is available
+  const checkHandleAvailability = async (handleToCheck: string) => {
+    if (!handleToCheck || handleToCheck.trim() === '') {
+      setHandleAvailable(null);
+      return;
+    }
+
+    setCheckingHandle(true);
+    try {
+      const profileEvents = await suiClient.queryEvents({
+        query: {
+          MoveEventType: `${PACKAGE_ID}::creator_profile::ProfileCreated`,
+        },
+        limit: 100,
+      });
+
+      const handleTaken = profileEvents.data.some(
+        (event: any) => event.parsedJson?.handle === handleToCheck
+      );
+
+      setHandleAvailable(!handleTaken);
+    } catch (error) {
+      console.error('Error checking handle:', error);
+      setHandleAvailable(null);
+    } finally {
+      setCheckingHandle(false);
     }
   };
 
@@ -124,6 +168,26 @@ export default function Dashboard() {
         const profileIdFromEvent = eventData.profile_id;
         console.log("Found profile:", profileIdFromEvent);
         setProfileId(profileIdFromEvent);
+        
+        // Fetch full profile object to get handle, bio, images, etc.
+        const profileObj = await suiClient.getObject({
+          id: profileIdFromEvent,
+          options: { showContent: true },
+        });
+
+        if (profileObj.data?.content?.dataType === "moveObject") {
+          const fields = profileObj.data.content.fields as any;
+          setHandle(fields.handle || "");
+          setBio(fields.bio || "");
+          console.log("✅ Profile loaded:", {
+            handle: fields.handle,
+            bio: fields.bio,
+            profileImage: fields.profile_image_blob_id,
+            bannerImage: fields.banner_image_blob_id,
+            suinsName: fields.suins_name
+          });
+        }
+        
         setHasProfile(true);
         
         // Fetch existing tiers for this profile
@@ -244,6 +308,160 @@ export default function Dashboard() {
     }
   };
 
+  const uploadImageToWalrus = async (file: File): Promise<string> => {
+    try {
+      console.log("📤 Uploading to Walrus:", file.name, `(${(file.size / 1024).toFixed(2)} KB)`);
+      
+      // Use the CORRECT Walrus publisher endpoint with epochs parameter
+      const publisherUrl = "https://publisher.walrus-testnet.walrus.space";
+      const numEpochs = 1;
+      const walrusUrl = `${publisherUrl}/v1/blobs?epochs=${numEpochs}`;
+      console.log("🌐 Walrus URL:", walrusUrl);
+      
+      const response = await fetch(walrusUrl, {
+        method: "PUT",
+        body: file,
+      });
+
+      console.log("📥 Walrus response status:", response.status, response.statusText);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("❌ Walrus upload failed:", {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText
+        });
+        throw new Error(`Walrus upload failed (${response.status}): ${errorText || response.statusText}`);
+      }
+
+      const responseText = await response.text();
+      console.log("📄 Walrus raw response:", responseText.substring(0, 200));
+      
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error("❌ Failed to parse JSON:", parseError);
+        console.error("Response was:", responseText);
+        throw new Error("Invalid JSON response from Walrus");
+      }
+      
+      console.log("📦 Parsed Walrus data:", data);
+      
+      // Response format: { newlyCreated: { blobObject: { blobId, ... } } }
+      // or { alreadyCertified: { blobId, ... } }
+      if (data.newlyCreated) {
+        const blobId = data.newlyCreated.blobObject.blobId;
+        console.log("✅ New blob created:", blobId);
+        return blobId;
+      } else if (data.alreadyCertified) {
+        const blobId = data.alreadyCertified.blobId;
+        console.log("✅ Blob already exists:", blobId);
+        return blobId;
+      }
+      
+      console.error("❌ Unexpected response structure:", data);
+      throw new Error("Unexpected Walrus response format");
+    } catch (error) {
+      console.error("❌ Image upload error:", error);
+      throw error;
+    }
+  };
+
+  const handleUpdateProfile = async () => {
+    if (!profileId || !editBio) {
+      alert("Please fill all required fields");
+      return;
+    }
+
+    if (!account?.address) {
+      alert("Please connect your wallet");
+      return;
+    }
+
+    setUpdatingProfile(true);
+
+    try {
+      // Find CreatorCap owned by user
+      console.log("🔍 Looking for CreatorCap...");
+      const ownedObjects = await suiClient.getOwnedObjects({
+        owner: account.address,
+        filter: {
+          StructType: `${PACKAGE_ID}::creator_profile::CreatorCap`,
+        },
+        options: {
+          showContent: true,
+        },
+      });
+
+      if (ownedObjects.data.length === 0) {
+        alert("CreatorCap not found. You need to own the profile to edit it.");
+        setUpdatingProfile(false);
+        return;
+      }
+
+      const creatorCapId = ownedObjects.data[0].data?.objectId;
+      console.log("✅ Found CreatorCap:", creatorCapId);
+
+      // Upload new images if provided
+      let profileImageBlobId = "";
+      let bannerImageBlobId = "";
+
+      if (editProfileImage) {
+        console.log("Uploading new profile image...");
+        profileImageBlobId = await uploadImageToWalrus(editProfileImage);
+        console.log("Profile image uploaded:", profileImageBlobId);
+      }
+
+      if (editBannerImage) {
+        console.log("Uploading new banner image...");
+        bannerImageBlobId = await uploadImageToWalrus(editBannerImage);
+        console.log("Banner image uploaded:", bannerImageBlobId);
+      }
+
+      const tx = new Transaction();
+      
+      // Contract signature: update_profile(profile, cap, bio, profile_image, banner_image, suins_name, ctx)
+      tx.moveCall({
+        target: `${PACKAGE_ID}::creator_profile::update_profile`,
+        arguments: [
+          tx.object(profileId), // profile
+          tx.object(creatorCapId!), // cap
+          tx.pure.string(editBio), // bio
+          tx.pure.string(profileImageBlobId || ""), // profile_image_blob_id
+          tx.pure.string(bannerImageBlobId || ""), // banner_image_blob_id
+          tx.pure.string(userSuiNS || ""), // suins_name
+        ],
+      });
+
+      signAndExecute(
+        {
+          transaction: tx,
+        },
+        {
+          onSuccess: async (result: any) => {
+            console.log("Profile updated:", result);
+            alert("Profile updated successfully!");
+            setShowEditProfile(false);
+            
+            // Re-fetch profile
+            await fetchCreatorProfile();
+          },
+          onError: (error) => {
+            console.error("Profile update error:", error);
+            alert(`Profile update failed: ${error.message}`);
+          },
+        }
+      );
+    } catch (error) {
+      console.error("Profile update error:", error);
+      alert(`Profile update failed: ${error}`);
+    } finally {
+      setUpdatingProfile(false);
+    }
+  };
+
   const handleCreateProfile = async () => {
     if (!account || !handle || !bio) {
       alert("Please fill all fields");
@@ -253,6 +471,46 @@ export default function Dashboard() {
     setCreatingProfile(true);
 
     try {
+      // Check if handle is already taken
+      console.log("🔍 Checking if handle is available:", handle);
+      const profileEvents = await suiClient.queryEvents({
+        query: {
+          MoveEventType: `${PACKAGE_ID}::creator_profile::ProfileCreated`,
+        },
+        limit: 100,
+      });
+
+      const handleTaken = profileEvents.data.some(
+        (event: any) => event.parsedJson?.handle === handle
+      );
+
+      if (handleTaken) {
+        alert(`Handle "@${handle}" is already taken. Please choose a different one.`);
+        setCreatingProfile(false);
+        return;
+      }
+
+      console.log("✅ Handle is available!");
+      setUploadingImages(true);
+
+      // Upload images to Walrus if provided
+      let profileImageBlobId = "";
+      let bannerImageBlobId = "";
+
+      if (profileImage) {
+        console.log("Uploading profile image to Walrus...");
+        profileImageBlobId = await uploadImageToWalrus(profileImage);
+        console.log("Profile image uploaded:", profileImageBlobId);
+      }
+
+      if (bannerImage) {
+        console.log("Uploading banner image to Walrus...");
+        bannerImageBlobId = await uploadImageToWalrus(bannerImage);
+        console.log("Banner image uploaded:", bannerImageBlobId);
+      }
+
+      setUploadingImages(false);
+
       const tx = new Transaction();
       
       tx.moveCall({
@@ -260,8 +518,8 @@ export default function Dashboard() {
         arguments: [
           tx.pure.string(handle),
           tx.pure.string(bio),
-          tx.pure.string("default_profile_image"),
-          tx.pure.string("default_banner_image"),
+          tx.pure.string(profileImageBlobId || ""),
+          tx.pure.string(bannerImageBlobId || ""),
           tx.pure.string(userSuiNS || ""), // SuiNS name or empty string
         ],
       });
@@ -293,6 +551,7 @@ export default function Dashboard() {
       alert(`Profile creation failed: ${error}`);
     } finally {
       setCreatingProfile(false);
+      setUploadingImages(false);
     }
   };
 
@@ -608,21 +867,61 @@ export default function Dashboard() {
                         </span>
                       )}
                     </label>
-                    <input
-                      type="text"
-                      value={handle}
-                      onChange={(e) => setHandle(e.target.value)}
-                      disabled={!!userSuiNS}
-                      className={`w-full border border-gray-300 rounded p-2 text-gray-900 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none ${
-                        userSuiNS ? 'bg-gray-50 cursor-not-allowed opacity-75' : ''
-                      }`}
-                      placeholder={userSuiNS ? userSuiNS.replace('.sui', '') : "@yourname"}
-                    />
-                    {userSuiNS && (
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={handle}
+                        onChange={(e) => {
+                          const newHandle = e.target.value;
+                          setHandle(newHandle);
+                          // Debounced check
+                          if (newHandle.trim()) {
+                            setTimeout(() => checkHandleAvailability(newHandle), 500);
+                          } else {
+                            setHandleAvailable(null);
+                          }
+                        }}
+                        disabled={!!userSuiNS}
+                        className={`w-full border rounded p-2 text-gray-900 bg-white focus:ring-2 outline-none pr-10 ${
+                          userSuiNS 
+                            ? 'bg-gray-50 cursor-not-allowed opacity-75 border-gray-300' 
+                            : handleAvailable === true
+                            ? 'border-green-500 focus:border-green-500 focus:ring-green-200'
+                            : handleAvailable === false
+                            ? 'border-red-500 focus:border-red-500 focus:ring-red-200'
+                            : 'border-gray-300 focus:border-blue-500 focus:ring-blue-200'
+                        }`}
+                        placeholder={userSuiNS ? userSuiNS.replace('.sui', '') : "@yourname"}
+                      />
+                      {!userSuiNS && handle && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                          {checkingHandle ? (
+                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600" />
+                          ) : handleAvailable === true ? (
+                            <svg className="w-5 h-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                            </svg>
+                          ) : handleAvailable === false ? (
+                            <svg className="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                            </svg>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
+                    {userSuiNS ? (
                       <p className="text-xs text-gray-500 mt-1">
                         Handle is automatically set from your SuiNS name. To use a different handle, disconnect your SuiNS name first.
                       </p>
-                    )}
+                    ) : handleAvailable === false ? (
+                      <p className="text-xs text-red-600 mt-1">
+                        ❌ Handle "@{handle}" is already taken. Please choose a different one.
+                      </p>
+                    ) : handleAvailable === true ? (
+                      <p className="text-xs text-green-600 mt-1">
+                        ✅ Handle "@{handle}" is available!
+                      </p>
+                    ) : null}
                   </div>
 
                   <div>
@@ -636,6 +935,56 @@ export default function Dashboard() {
                       rows={4}
                       placeholder="Tell your fans about yourself..."
                     />
+                  </div>
+
+                  {/* Profile Image Upload */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Profile Image
+                    </label>
+                    <div className="flex items-center gap-4">
+                      {profileImage && (
+                        <img
+                          src={URL.createObjectURL(profileImage)}
+                          alt="Profile preview"
+                          className="w-20 h-20 rounded-full object-cover border-2 border-gray-200"
+                        />
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => setProfileImage(e.target.files?.[0] || null)}
+                        className="flex-1 border border-gray-300 rounded p-2 text-gray-900 bg-white file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Recommended: Square image, at least 400x400px
+                    </p>
+                  </div>
+
+                  {/* Banner Image Upload */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Banner Image
+                    </label>
+                    <div className="space-y-2">
+                      {bannerImage && (
+                        <img
+                          src={URL.createObjectURL(bannerImage)}
+                          alt="Banner preview"
+                          className="w-full h-32 rounded-lg object-cover border-2 border-gray-200"
+                        />
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => setBannerImage(e.target.files?.[0] || null)}
+                        className="w-full border border-gray-300 rounded p-2 text-gray-900 bg-white file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Recommended: Wide image, at least 1200x300px
+                    </p>
                   </div>
 
                   {/* SuiNS Display */}
@@ -671,7 +1020,7 @@ export default function Dashboard() {
                       </div>
                       <p className="text-xs text-gray-600">
                         You can register a .sui name at{' '}
-                        <a href="https://suins.io" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                        <a href="https://testnet.suins.io" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
                           suins.io
                         </a>
                       </p>
@@ -680,16 +1029,73 @@ export default function Dashboard() {
 
                   <button
                     onClick={handleCreateProfile}
-                    disabled={creatingProfile}
+                    disabled={
+                      creatingProfile || 
+                      uploadingImages || 
+                      checkingHandle || 
+                      handleAvailable === false || 
+                      (!userSuiNS && !handle)
+                    }
                     className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
                   >
-                    {creatingProfile ? "Creating..." : "Create Profile"}
+                    {uploadingImages
+                      ? "Uploading images..."
+                      : creatingProfile
+                      ? "Creating profile..."
+                      : checkingHandle
+                      ? "Checking handle..."
+                      : handleAvailable === false
+                      ? "Handle already taken"
+                      : "Create Profile"}
                   </button>
                 </div>
               </div>
             </div>
           ) : (
             <div className="space-y-8">
+              {/* Profile Info & Actions */}
+              <div className="bg-white rounded-lg shadow-md p-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <h2 className="text-2xl font-bold text-gray-900">@{handle}</h2>
+                    <p className="text-gray-600 mt-1">{bio}</p>
+                    {userSuiNS && (
+                      <div className="flex items-center gap-2 mt-2">
+                        <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                        <span className="text-sm text-green-600 font-medium">{userSuiNS}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Link
+                      href={`/creator/${userSuiNS || handle || account?.address}`}
+                      target="_blank"
+                      className="bg-gray-100 text-gray-700 px-6 py-2 rounded-lg font-semibold hover:bg-gray-200 transition flex items-center gap-2"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                      View Public Profile
+                    </Link>
+                    <button
+                    onClick={() => {
+                      setEditBio(bio);
+                      setShowEditProfile(true);
+                    }}
+                      className="bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-blue-700 transition flex items-center gap-2"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                      Edit Profile
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               {/* Stats */}
               <div className="grid md:grid-cols-4 gap-6">
                 <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg shadow-md p-6 text-white">
@@ -1098,6 +1504,110 @@ export default function Dashboard() {
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 font-medium"
                 >
                   {isUpdating ? "Updating..." : "Update"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Profile Modal */}
+        {showEditProfile && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+            <div className="bg-white rounded-lg max-w-2xl w-full p-8 my-8">
+              <h3 className="text-2xl font-bold text-gray-900 mb-6">Edit Profile</h3>
+              
+              <div className="space-y-6">
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <p className="text-sm text-gray-600">
+                    <strong>Note:</strong> Handle cannot be changed after profile creation. 
+                    Only bio and images can be updated.
+                  </p>
+                  <p className="text-sm text-gray-700 mt-2">
+                    Current Handle: <span className="font-semibold">@{handle}</span>
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Bio
+                  </label>
+                  <textarea
+                    value={editBio}
+                    onChange={(e) => setEditBio(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-gray-900 resize-none"
+                    placeholder="Tell your fans about yourself..."
+                    rows={4}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    New Profile Image
+                  </label>
+                  <div className="flex items-center gap-4">
+                    {editProfileImage && (
+                      <img
+                        src={URL.createObjectURL(editProfileImage)}
+                        alt="Profile preview"
+                        className="w-20 h-20 rounded-full object-cover border-2 border-gray-200"
+                      />
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setEditProfileImage(e.target.files?.[0] || null)}
+                      className="flex-1 border border-gray-300 rounded p-2 text-gray-900 bg-white file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Leave empty to keep current image
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    New Banner Image
+                  </label>
+                  <div className="space-y-2">
+                    {editBannerImage && (
+                      <img
+                        src={URL.createObjectURL(editBannerImage)}
+                        alt="Banner preview"
+                        className="w-full h-32 rounded-lg object-cover border-2 border-gray-200"
+                      />
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setEditBannerImage(e.target.files?.[0] || null)}
+                      className="w-full border border-gray-300 rounded p-2 text-gray-900 bg-white file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Leave empty to keep current image
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-8">
+                <button
+                  onClick={() => {
+                    setShowEditProfile(false);
+                    setEditBio("");
+                    setEditProfileImage(null);
+                    setEditBannerImage(null);
+                  }}
+                  disabled={updatingProfile}
+                  className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition disabled:opacity-50 font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUpdateProfile}
+                  disabled={updatingProfile || !editBio}
+                  className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 font-semibold"
+                >
+                  {updatingProfile ? "Updating..." : "Update Profile"}
                 </button>
               </div>
             </div>

@@ -16,6 +16,9 @@ interface CreatorProfile {
   address: string;
   handle: string;
   bio: string;
+  profileImage?: string;
+  bannerImage?: string;
+  suinsName?: string;
 }
 
 interface Tier {
@@ -54,9 +57,10 @@ export default function CreatorProfile({
   const [content, setContent] = useState<Content[]>([]);
   const [userSubscribedTiers, setUserSubscribedTiers] = useState<Set<string>>(new Set());
 
-  // Resolve SuiNS name to address if needed
+  // Resolve SuiNS name or handle to address
   useEffect(() => {
     const resolveAddress = async () => {
+      // Check if it's a SuiNS name (.sui)
       if (isSuiNSName(addressOrSuiNS)) {
         console.log('🔍 Resolving SuiNS name:', addressOrSuiNS);
         const addr = await resolveNameToAddress(addressOrSuiNS, suiClient);
@@ -67,9 +71,40 @@ export default function CreatorProfile({
           console.log('❌ SuiNS name not found');
           setResolvedAddress(null);
         }
-      } else {
-        // Already an address
+      } 
+      // Check if it's an address (starts with 0x)
+      else if (addressOrSuiNS.startsWith('0x')) {
+        console.log('📍 Using address directly:', addressOrSuiNS);
         setResolvedAddress(addressOrSuiNS);
+      }
+      // Otherwise, treat it as a handle/username
+      else {
+        console.log('👤 Looking up handle:', addressOrSuiNS);
+        try {
+          // Fetch all profiles and find by handle
+          const profileEvents = await suiClient.queryEvents({
+            query: {
+              MoveEventType: `${PACKAGE_ID}::creator_profile::ProfileCreated`,
+            },
+            limit: 100,
+          });
+
+          const matchingProfile = profileEvents.data.find(
+            (event: any) => event.parsedJson?.handle === addressOrSuiNS
+          );
+
+          if (matchingProfile && matchingProfile.parsedJson) {
+            const addr = (matchingProfile.parsedJson as any).owner;
+            console.log('✅ Handle resolved to:', addr);
+            setResolvedAddress(addr);
+          } else {
+            console.log('❌ Handle not found');
+            setResolvedAddress(null);
+          }
+        } catch (error) {
+          console.error('❌ Error looking up handle:', error);
+          setResolvedAddress(null);
+        }
       }
     };
     
@@ -107,11 +142,37 @@ export default function CreatorProfile({
 
       if (creatorProfile) {
         const data = creatorProfile.parsedJson as any;
+        const profileId = data.profile_id;
+        
+        // Fetch full profile object to get images
+        const profileObj = await suiClient.getObject({
+          id: profileId,
+          options: { showContent: true },
+        });
+
+        let profileImage = "";
+        let bannerImage = "";
+        let suinsName = "";
+        let bio = "Creator on Web3 Patreon";
+        let handle = data.handle || data.owner.slice(0, 8);
+
+        if (profileObj.data?.content?.dataType === "moveObject") {
+          const fields = profileObj.data.content.fields as any;
+          profileImage = fields.profile_image_blob_id || "";
+          bannerImage = fields.banner_image_blob_id || "";
+          suinsName = fields.suins_name || "";
+          bio = fields.bio || "Creator on Web3 Patreon";
+          handle = fields.handle || handle;
+        }
+
         setProfile({
-          id: data.profile_id,
+          id: profileId,
           address: data.owner,
-          handle: data.handle || data.owner.slice(0, 8),
-          bio: data.bio || "Creator on Web3 Patreon",
+          handle,
+          bio,
+          profileImage,
+          bannerImage,
+          suinsName,
         });
       }
 
@@ -304,19 +365,47 @@ export default function CreatorProfile({
         </header>
 
         {/* Banner */}
-        <div className="bg-gradient-to-r from-blue-500 to-purple-600 h-48" />
+        {profile.bannerImage ? (
+          <div 
+            className="h-48 bg-cover bg-center"
+            style={{
+              backgroundImage: `url(https://aggregator.walrus-testnet.walrus.space/v1/blobs/${profile.bannerImage})`
+            }}
+          />
+        ) : (
+          <div className="bg-gradient-to-r from-blue-500 to-purple-600 h-48" />
+        )}
 
         <div className="container mx-auto px-4">
           {/* Profile Section */}
           <div className="relative -mt-20 mb-8">
             <div className="bg-white rounded-lg shadow-lg p-8">
               <div className="flex items-start gap-6">
-                <div className="w-32 h-32 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold text-4xl">
-                  {profile.handle[0].toUpperCase()}
-                </div>
+                {/* Profile Image */}
+                {profile.profileImage ? (
+                  <img
+                    src={`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${profile.profileImage}`}
+                    alt={profile.handle}
+                    className="w-32 h-32 rounded-full object-cover border-4 border-white shadow-lg flex-shrink-0"
+                  />
+                ) : (
+                  <div className="w-32 h-32 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold text-4xl border-4 border-white shadow-lg">
+                    {profile.handle[0].toUpperCase()}
+                  </div>
+                )}
                 
                 <div className="flex-grow">
-                  <h1 className="text-3xl font-bold text-gray-900 mb-2">@{profile.handle}</h1>
+                  <div className="flex items-center gap-3 mb-2">
+                    <h1 className="text-3xl font-bold text-gray-900">@{profile.handle}</h1>
+                    {profile.suinsName && (
+                      <span className="flex items-center gap-1 bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                        {profile.suinsName}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-gray-600 mb-4">{profile.bio}</p>
                   
                   <div className="flex gap-6 text-sm text-gray-600 mb-4">

@@ -60,6 +60,26 @@ export default function Explore() {
         profileEvents.data.map(async (event: any) => {
           const data = event.parsedJson;
           const address = data.owner;
+          const profileId = data.profile_id;
+          
+          // Fetch full profile object to get bio and images
+          let bio = "Creator on Web3 Patreon";
+          let handle = data.handle || address.slice(0, 8);
+          
+          try {
+            const profileObj = await suiClient.getObject({
+              id: profileId,
+              options: { showContent: true },
+            });
+
+            if (profileObj.data?.content?.dataType === "moveObject") {
+              const fields = profileObj.data.content.fields as any;
+              bio = fields.bio || bio;
+              handle = fields.handle || handle;
+            }
+          } catch (error) {
+            console.log(`Could not fetch profile details for ${address.slice(0, 8)}...`);
+          }
           
           // Resolve SuiNS name for each creator
           let suinsName: string | null = null;
@@ -71,9 +91,9 @@ export default function Explore() {
           
           return {
             address,
-            handle: data.handle || data.owner.slice(0, 8),
-            bio: data.bio || "Creator on Web3 Patreon",
-            profileId: data.profile_id,
+            handle,
+            bio,
+            profileId,
             contentCount: contentCountMap[address] || 0,
             suinsName,
           };
@@ -174,8 +194,8 @@ export default function Explore() {
           ) : (
             <div className="grid md:grid-cols-3 gap-6">
               {filteredCreators.map((creator) => {
-                // Use SuiNS name in URL if available, otherwise use address
-                const creatorUrl = creator.suinsName || creator.address;
+                // Priority: SuiNS name > handle > address
+                const creatorUrl = creator.suinsName || creator.handle || creator.address;
                 
                 return (
                 <Link
