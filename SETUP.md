@@ -120,7 +120,7 @@ NEXT_PUBLIC_PACKAGE_ID=<your-package-id>
    - Select a file (image, video, audio, PDF)
    - Enter title and description
    - Choose if content is public or private
-   - For private: select tier or set pay-per-view price
+   - For private: select tier for subscription access
    - Click "Upload Content"
    - Wait for encryption → upload → on-chain record
 

@@ -2,8 +2,6 @@ module patreon::content {
     use sui::object::{Self, UID, ID};
     use sui::tx_context::{Self, TxContext};
     use sui::transfer;
-    use sui::coin::{Self, Coin};
-    use sui::sui::SUI;
     use sui::clock::{Self, Clock};
     use std::string::String;
     use sui::event;
@@ -21,20 +19,10 @@ module patreon::content {
         seal_policy_id: String,
         required_tier_id: ID,
         is_public: bool,
-        is_pay_per_view: bool,
-        ppv_price: u64,
         created_at: u64,
         content_type: String,
         is_archived: bool,
         encryption_key: String, // Base64 encoded key for this specific content
-    }
-
-    /// One-time Purchase Access NFT
-    public struct ContentAccess has key, store {
-        id: UID,
-        content_id: ID,
-        owner: address,
-        purchased_at: u64,
     }
 
     /// Event when content is created
@@ -45,16 +33,7 @@ module patreon::content {
         is_public: bool,
     }
 
-    /// Event when content is purchased
-    public struct ContentPurchased has copy, drop {
-        content_id: ID,
-        buyer: address,
-        price: u64,
-    }
-
     /// Error codes
-    const EInsufficientPayment: u64 = 0;
-    const ENoAccess: u64 = 1;
     const ENotCreator: u64 = 2;
 
     /// Create new content post
@@ -66,8 +45,6 @@ module patreon::content {
         seal_policy_id: String,
         required_tier_id: ID,
         is_public: bool,
-        is_pay_per_view: bool,
-        ppv_price: u64,
         content_type: String,
         encryption_key: String, // Base64 encoded key for this content
         clock: &Clock,
@@ -88,8 +65,6 @@ module patreon::content {
             seal_policy_id,
             required_tier_id,
             is_public,
-            is_pay_per_view,
-            ppv_price,
             created_at: clock::timestamp_ms(clock),
             content_type,
             is_archived: false,
@@ -106,42 +81,6 @@ module patreon::content {
         });
 
         transfer::share_object(content);
-    }
-
-    /// Purchase content (pay-per-view)
-    public entry fun purchase_content(
-        content: &ContentPost,
-        profile: &mut CreatorProfile,
-        payment: Coin<SUI>,
-        clock: &Clock,
-        ctx: &mut TxContext
-    ) {
-        let sender = tx_context::sender(ctx);
-        
-        assert!(content.is_pay_per_view, ENoAccess);
-        assert!(coin::value(&payment) >= content.ppv_price, EInsufficientPayment);
-
-        // Transfer payment to creator
-        transfer::public_transfer(payment, content.creator);
-
-        // Create access NFT
-        let access = ContentAccess {
-            id: object::new(ctx),
-            content_id: object::id(content),
-            owner: sender,
-            purchased_at: clock::timestamp_ms(clock),
-        };
-
-        // Add revenue to creator profile
-        creator_profile::add_revenue(profile, content.ppv_price);
-
-        event::emit(ContentPurchased {
-            content_id: object::id(content),
-            buyer: sender,
-            price: content.ppv_price,
-        });
-
-        transfer::transfer(access, sender);
     }
 
     /// Check if user has access to content
@@ -165,14 +104,6 @@ module patreon::content {
         subscription::get_tier_id(subscription) == content.required_tier_id
     }
 
-    /// Check if user has purchased access
-    public fun has_purchased_access(
-        content: &ContentPost,
-        access: &ContentAccess
-    ): bool {
-        access.content_id == object::id(content)
-    }
-
     /// Get content details
     public fun get_creator(content: &ContentPost): address {
         content.creator
@@ -192,10 +123,6 @@ module patreon::content {
 
     public fun get_required_tier_id(content: &ContentPost): ID {
         content.required_tier_id
-    }
-
-    public fun get_ppv_price(content: &ContentPost): u64 {
-        content.ppv_price
     }
 
     /// Update content metadata

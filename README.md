@@ -16,7 +16,6 @@ Web3 Patreon empowers creators to monetize their content directly on-chain witho
 - **Subscription NFTs**: Tradeable, transferable membership tokens
 - **Direct Payments**: 100% of subscription fees go directly to creators
 - **Multiple Tiers**: Create unlimited subscription tiers with custom pricing
-- **Pay-Per-View**: Option for one-time content purchases
 - **Tips**: Direct tipping functionality for instant support
 
 ## 🏗️ Architecture

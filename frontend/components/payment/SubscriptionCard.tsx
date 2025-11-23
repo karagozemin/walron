@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useSignAndExecuteTransaction } from "@mysten/dapp-kit";
 import { Transaction } from "@mysten/sui/transactions";
 import { PACKAGE_ID } from "@/lib/sui/config";
+import { suiClient } from "@/lib/sui/client";
 
 interface SubscriptionCardProps {
   tier: {
@@ -55,13 +56,35 @@ export function SubscriptionCard({ tier, profileId, isSubscribed }: Subscription
           transaction: tx,
         },
         {
-          onSuccess: (result) => {
-            console.log("Subscribed:", result);
-            alert("Successfully subscribed!");
-            window.location.reload();
+          onSuccess: async (result) => {
+            console.log("✅ Subscription transaction submitted:", result.digest);
+            
+            try {
+              // Wait for transaction to be finalized on blockchain
+              console.log("⏳ Waiting for blockchain confirmation...");
+              await suiClient.waitForTransaction({
+                digest: result.digest,
+                options: { showEffects: true }
+              });
+              
+              console.log("✅ Transaction confirmed on blockchain!");
+              
+              // Additional delay to ensure indexing
+              console.log("⏳ Waiting for indexing (3 seconds)...");
+              await new Promise(resolve => setTimeout(resolve, 3000));
+              
+              console.log("✅ Reloading page to show new subscription...");
+              alert("Successfully subscribed! Content will unlock now.");
+              window.location.reload();
+            } catch (waitError) {
+              console.error("❌ Error waiting for transaction:", waitError);
+              alert("Subscribed, but please refresh manually to see changes.");
+              // Still reload after 2 seconds even if wait fails
+              setTimeout(() => window.location.reload(), 2000);
+            }
           },
           onError: (error) => {
-            console.error("Subscription error:", error);
+            console.error("❌ Subscription transaction error:", error);
             alert(`Subscription failed: ${error.message}`);
           },
         }

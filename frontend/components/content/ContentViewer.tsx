@@ -29,8 +29,6 @@ interface ContentViewerProps {
     creator: string;
     encryptionKey?: string; // Base64 encoded key from blockchain
     requiredTierId?: string;
-    isPPV?: boolean;
-    ppvPrice?: string;
   };
   hasAccess: boolean;
   createdAt?: string;
@@ -506,11 +504,6 @@ export function ContentViewer({
                     Subscribe to <span className="font-semibold">{requiredTierName}</span> tier to unlock
                   </p>
                 )}
-                {content.isPPV && content.ppvPrice && (
-                  <p className="text-sm mb-3">
-                    Or purchase for <span className="font-semibold">{content.ppvPrice} SUI</span>
-                  </p>
-                )}
               </div>
             </div>
           </div>
@@ -574,12 +567,7 @@ export function ContentViewer({
               Subscribe to the <strong>{requiredTierName}</strong> tier to access this content
             </p>
           ) : (
-            <p className="text-gray-600 mb-6">Subscribe or purchase to access this content</p>
-          )}
-          {content.isPPV && content.ppvPrice && (
-            <p className="text-sm text-gray-500">
-              Or purchase for <strong>{content.ppvPrice} SUI</strong>
-            </p>
+            <p className="text-gray-600 mb-6">Subscribe to access this content</p>
           )}
         </div>
 

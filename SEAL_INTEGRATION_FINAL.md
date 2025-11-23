@@ -192,7 +192,6 @@ const decrypted = await crypto.subtle.decrypt(
 | **Creator Preview** | ✅ | Direct symmetric key access |
 | **Subscriber Access** | ✅ | Subscription + decryption |
 | **Tier-based Access Control** | ✅ | On-chain tier verification |
-| **Pay-Per-View Support** | ✅ | One-time payment option |
 
 ---
 

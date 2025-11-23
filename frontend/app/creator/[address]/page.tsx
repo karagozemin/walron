@@ -37,8 +37,6 @@ interface Content {
   creator: string;
   encryptionKey?: string;
   requiredTierId?: string;
-  isPPV?: boolean;
-  ppvPrice?: string;
 }
 
 export default function CreatorProfile({
@@ -157,8 +155,6 @@ export default function CreatorProfile({
               sealPolicyId: fields.seal_policy_id || "",
               description: fields.description || "",
               requiredTierId: fields.required_tier_id || "",
-              isPPV: fields.is_ppv || false,
-              ppvPrice: fields.ppv_price ? (parseInt(fields.ppv_price) / 1e9).toString() : "0",
             };
           } catch (error) {
             console.error(`Error fetching content object ${data.content_id}:`, error);
@@ -176,9 +172,18 @@ export default function CreatorProfile({
   };
 
   const checkUserSubscriptions = async () => {
-    if (!currentAccount?.address || tiers.length === 0) return;
+    if (!currentAccount?.address || tiers.length === 0) {
+      console.log("⚠️ Cannot check subscriptions:", {
+        hasAccount: !!currentAccount?.address,
+        tiersCount: tiers.length
+      });
+      return;
+    }
 
     try {
+      console.log("🔍 Checking subscriptions for:", currentAccount.address);
+      console.log("📦 Using PACKAGE_ID:", PACKAGE_ID);
+      
       // Get user's owned objects (Subscription NFTs)
       const ownedObjects = await suiClient.getOwnedObjects({
         owner: currentAccount.address,
@@ -188,26 +193,33 @@ export default function CreatorProfile({
         },
       });
 
-      console.log("User's owned objects:", ownedObjects.data.length);
+      console.log("📋 Total owned objects:", ownedObjects.data.length);
 
       // Find Subscription NFTs
       const userTierIds = new Set<string>();
       ownedObjects.data.forEach((obj: any) => {
         const type = obj.data?.type;
+        console.log("🔎 Checking object type:", type);
+        
         // Check if this is a Subscription NFT
         if (type?.includes(`${PACKAGE_ID}::subscription::Subscription`)) {
           const fields = (obj.data?.content as any)?.fields;
+          console.log("✅ Found Subscription NFT! Fields:", fields);
+          
           if (fields?.tier_id) {
             userTierIds.add(fields.tier_id);
-            console.log("Found subscription to tier:", fields.tier_id);
+            console.log("🎟️ Found subscription to tier:", fields.tier_id);
+          } else {
+            console.log("⚠️ Subscription NFT missing tier_id field");
           }
         }
       });
 
       setUserSubscribedTiers(userTierIds);
-      console.log("User subscribed to tiers:", Array.from(userTierIds));
+      console.log("✅ User subscribed to tiers:", Array.from(userTierIds));
+      console.log("📊 Total subscriptions found:", userTierIds.size);
     } catch (error) {
-      console.error("Error checking subscriptions:", error);
+      console.error("❌ Error checking subscriptions:", error);
     }
   };
 
@@ -343,6 +355,17 @@ export default function CreatorProfile({
                   
                   // Find the tier name for this content
                   const requiredTier = tiers.find(t => t.id === item.requiredTierId);
+
+                  // Debug log for each content item
+                  console.log(`🎬 Content: "${item.title}"`, {
+                    contentId: item.id.slice(0, 10) + '...',
+                    isPublic: item.isPublic,
+                    requiredTierId: item.requiredTierId ? item.requiredTierId.slice(0, 10) + '...' : 'none',
+                    isCreator,
+                    hasRequiredTier,
+                    hasAccess: hasAccess ? '✅' : '🔒',
+                    userSubscriptions: Array.from(userSubscribedTiers).map(id => id.slice(0, 10) + '...')
+                  });
 
                   return (
                     <div key={item.id} className="bg-white rounded-lg shadow-md overflow-hidden">

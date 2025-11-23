@@ -27,8 +27,6 @@ export function ContentUploader({ profileId, tiers }: ContentUploaderProps) {
   const [description, setDescription] = useState("");
   const [selectedTier, setSelectedTier] = useState("");
   const [isPublic, setIsPublic] = useState(false);
-  const [isPPV, setIsPPV] = useState(false);
-  const [ppvPrice, setPpvPrice] = useState("");
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -169,11 +167,6 @@ export function ContentUploader({ profileId, tiers }: ContentUploaderProps) {
         throw new Error("Seal encryption metadata missing. Cannot store to blockchain.");
       }
       
-      // Convert PPV price from SUI to MIST (1 SUI = 1,000,000,000 MIST)
-      const ppvPriceMist = isPPV && ppvPrice 
-        ? BigInt(Math.floor(parseFloat(ppvPrice) * 1_000_000_000))
-        : BigInt(0);
-      
       tx.moveCall({
         target: `${PACKAGE_ID}::content::create_content`,
         arguments: [
@@ -184,8 +177,6 @@ export function ContentUploader({ profileId, tiers }: ContentUploaderProps) {
           tx.pure.string(policyId),
           tx.pure.id(selectedTier || "0x0"),
           tx.pure.bool(isPublic),
-          tx.pure.bool(isPPV),
-          tx.pure.u64(ppvPriceMist),
           tx.pure.string(contentType === 'text' ? 'text' : (contentMimeType.split("/")[0] || "file")),
           tx.pure.string(keyBase64), // Store encryption key on-chain
           tx.object(clockObjectId),
@@ -209,8 +200,6 @@ export function ContentUploader({ profileId, tiers }: ContentUploaderProps) {
             setDescription("");
             setSelectedTier("");
             setIsPublic(false);
-            setIsPPV(false);
-            setPpvPrice("");
           },
           onError: (error) => {
             console.error("Transaction error:", error);
@@ -339,55 +328,21 @@ export function ContentUploader({ profileId, tiers }: ContentUploaderProps) {
         </div>
 
         {!isPublic && (
-          <>
-            <div>
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={isPPV}
-                  onChange={(e) => setIsPPV(e.target.checked)}
-                  className="rounded"
-                />
-                <span className="text-sm font-medium">Pay-Per-View</span>
-              </label>
-            </div>
-
-            {isPPV ? (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Price (SUI)</label>
-                <input
-                  type="number"
-                  value={ppvPrice}
-                  onChange={(e) => setPpvPrice(e.target.value)}
-                  className="w-full border border-gray-300 rounded p-2 text-gray-900 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
-                  placeholder="0.5"
-                  step="0.01"
-                  min="0"
-                />
-                {ppvPrice && parseFloat(ppvPrice) > 0 && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    = {(parseFloat(ppvPrice) * 1_000_000_000).toLocaleString()} MIST
-                  </p>
-                )}
-              </div>
-            ) : (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Required Tier</label>
-                <select
-                  value={selectedTier}
-                  onChange={(e) => setSelectedTier(e.target.value)}
-                  className="w-full border border-gray-300 rounded p-2 text-gray-900 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
-                >
-                  <option value="">Select tier</option>
-                  {tiers.map((tier) => (
-                    <option key={tier.id} value={tier.id}>
-                      {tier.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Required Tier</label>
+            <select
+              value={selectedTier}
+              onChange={(e) => setSelectedTier(e.target.value)}
+              className="w-full border border-gray-300 rounded p-2 text-gray-900 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+            >
+              <option value="">Select tier</option>
+              {tiers.map((tier) => (
+                <option key={tier.id} value={tier.id}>
+                  {tier.name}
+                </option>
+              ))}
+            </select>
+          </div>
         )}
 
         {uploading && (

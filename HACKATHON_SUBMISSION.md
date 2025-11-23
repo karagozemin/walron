@@ -67,7 +67,6 @@ Use any Sui testnet wallet (Sui Wallet, Suiet) with testnet SUI tokens.
   - AES-GCM encryption for all private content
   - Policy-based access control
   - Subscription-gated decryption
-  - Pay-per-view content support
 
 - **Access Policies:**
   - Tier-based subscription access
@@ -86,7 +85,6 @@ Use any Sui testnet wallet (Sui Wallet, Suiet) with testnet SUI tokens.
 - ✅ **Secure Content Hosting & Delivery**
   - Encrypted storage of media files
   - Tier-based access controls
-  - Pay-per-view support
 
 - ✅ **Authentication & Access Management**
   - Wallet-based authentication
@@ -95,7 +93,6 @@ Use any Sui testnet wallet (Sui Wallet, Suiet) with testnet SUI tokens.
 
 - ✅ **Monetization & Payments**
   - Monthly subscriptions
-  - One-time purchases
   - Direct tipping
   - Transparent revenue tracking
 
