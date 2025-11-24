@@ -12,9 +12,10 @@ import { suiClient } from "@/lib/sui/client";
 interface ContentUploaderProps {
   profileId: string;
   tiers: Array<{ id: string; name: string }>;
+  onSuccess?: () => void; // Callback after successful upload
 }
 
-export function ContentUploader({ profileId, tiers }: ContentUploaderProps) {
+export function ContentUploader({ profileId, tiers, onSuccess }: ContentUploaderProps) {
   const account = useCurrentAccount();
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
   
@@ -200,6 +201,11 @@ export function ContentUploader({ profileId, tiers }: ContentUploaderProps) {
             setDescription("");
             setSelectedTier("");
             setIsPublic(false);
+            
+            // Notify parent component to refresh content list
+            if (onSuccess) {
+              onSuccess();
+            }
           },
           onError: (error) => {
             console.error("Transaction error:", error);

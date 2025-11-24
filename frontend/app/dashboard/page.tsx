@@ -1238,7 +1238,11 @@ export default function Dashboard() {
 
               {/* Upload Content */}
               {tiers.length > 0 && (
-                <ContentUploader profileId={profileId} tiers={tiers} />
+                <ContentUploader 
+                  profileId={profileId} 
+                  tiers={tiers} 
+                  onSuccess={fetchMyContent} 
+                />
               )}
 
               {/* My Content */}
