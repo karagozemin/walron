@@ -62,25 +62,38 @@ export function SubscriptionCard({ tier, profileId, isSubscribed }: Subscription
             try {
               // Wait for transaction to be finalized on blockchain
               console.log("⏳ Waiting for blockchain confirmation...");
-              await suiClient.waitForTransaction({
+              const txResult = await suiClient.waitForTransaction({
                 digest: result.digest,
-                options: { showEffects: true }
+                options: { showEffects: true, showObjectChanges: true }
               });
               
               console.log("✅ Transaction confirmed on blockchain!");
+              console.log("📦 Transaction result:", txResult);
               
-              // Additional delay to ensure indexing
-              console.log("⏳ Waiting for indexing (3 seconds)...");
-              await new Promise(resolve => setTimeout(resolve, 3000));
+              // Find the created Subscription NFT in object changes
+              const objectChanges = txResult.objectChanges || [];
+              const subscriptionNFT = objectChanges.find(
+                (change: any) => 
+                  change.type === 'created' && 
+                  change.objectType?.includes('::subscription::Subscription')
+              );
+              
+              if (subscriptionNFT) {
+                console.log("🎟️ Subscription NFT created:", subscriptionNFT);
+              }
+              
+              // Additional delay to ensure indexing (5 seconds for better reliability)
+              console.log("⏳ Waiting for indexing (5 seconds)...");
+              await new Promise(resolve => setTimeout(resolve, 5000));
               
               console.log("✅ Reloading page to show new subscription...");
               alert("Successfully subscribed! Content will unlock now.");
-            window.location.reload();
+              window.location.reload();
             } catch (waitError) {
               console.error("❌ Error waiting for transaction:", waitError);
               alert("Subscribed, but please refresh manually to see changes.");
-              // Still reload after 2 seconds even if wait fails
-              setTimeout(() => window.location.reload(), 2000);
+              // Still reload after 3 seconds even if wait fails
+              setTimeout(() => window.location.reload(), 3000);
             }
           },
           onError: (error) => {

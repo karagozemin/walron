@@ -118,10 +118,16 @@ export default function CreatorProfile({
   }, [resolvedAddress]);
 
   useEffect(() => {
-    if (currentAccount?.address) {
+    if (currentAccount?.address && tiers.length > 0) {
+      console.log("🔄 Checking user subscriptions (triggered by account or tiers change)");
       checkUserSubscriptions();
+    } else {
+      // Clear subscriptions if user disconnects
+      if (!currentAccount?.address) {
+        setUserSubscribedTiers(new Set());
+      }
     }
-  }, [currentAccount?.address, tiers]);
+  }, [currentAccount?.address, tiers, resolvedAddress]);
 
   const fetchCreatorData = async () => {
     if (!resolvedAddress) return;
@@ -261,17 +267,23 @@ export default function CreatorProfile({
   };
 
   const checkUserSubscriptions = async () => {
-    if (!currentAccount?.address || tiers.length === 0) {
-      console.log("⚠️ Cannot check subscriptions:", {
-        hasAccount: !!currentAccount?.address,
-        tiersCount: tiers.length
-      });
+    if (!currentAccount?.address) {
+      console.log("⚠️ No wallet connected, skipping subscription check");
+      return;
+    }
+
+    if (tiers.length === 0) {
+      console.log("⚠️ No tiers loaded yet, will retry when tiers are available");
       return;
     }
 
     try {
       console.log("🔍 Checking subscriptions for:", currentAccount.address);
       console.log("📦 Using PACKAGE_ID:", PACKAGE_ID);
+      console.log("🎯 Looking for subscriptions to tiers:", tiers.map(t => ({
+        id: t.id.slice(0, 10) + '...',
+        name: t.name
+      })));
       
       // Get user's owned objects (Subscription NFTs)
       const ownedObjects = await suiClient.getOwnedObjects({
@@ -286,18 +298,34 @@ export default function CreatorProfile({
 
       // Find Subscription NFTs
       const userTierIds = new Set<string>();
+      let subscriptionCount = 0;
+      
       ownedObjects.data.forEach((obj: any) => {
         const type = obj.data?.type;
-        console.log("🔎 Checking object type:", type);
         
         // Check if this is a Subscription NFT
         if (type?.includes(`${PACKAGE_ID}::subscription::Subscription`)) {
+          subscriptionCount++;
           const fields = (obj.data?.content as any)?.fields;
-          console.log("✅ Found Subscription NFT! Fields:", fields);
+          console.log(`✅ Found Subscription NFT #${subscriptionCount}:`, {
+            objectId: obj.data?.objectId,
+            tierId: fields?.tier_id,
+            subscriber: fields?.subscriber,
+            expiresAt: fields?.expires_at,
+            allFields: fields
+          });
           
           if (fields?.tier_id) {
             userTierIds.add(fields.tier_id);
-            console.log("🎟️ Found subscription to tier:", fields.tier_id);
+            console.log("🎟️ Added subscription to tier:", fields.tier_id);
+            
+            // Check if this tier is in our current tier list
+            const matchingTier = tiers.find(t => t.id === fields.tier_id);
+            if (matchingTier) {
+              console.log("✅ Subscription matches tier:", matchingTier.name);
+            } else {
+              console.log("⚠️ Subscription tier not found in current tier list");
+            }
           } else {
             console.log("⚠️ Subscription NFT missing tier_id field");
           }
@@ -305,8 +333,12 @@ export default function CreatorProfile({
       });
 
       setUserSubscribedTiers(userTierIds);
-      console.log("✅ User subscribed to tiers:", Array.from(userTierIds));
+      console.log("✅ User subscribed to tiers:", Array.from(userTierIds).map(id => id.slice(0, 10) + '...'));
       console.log("📊 Total subscriptions found:", userTierIds.size);
+      
+      if (userTierIds.size === 0 && subscriptionCount === 0) {
+        console.log("ℹ️ No subscriptions found for this user");
+      }
     } catch (error) {
       console.error("❌ Error checking subscriptions:", error);
     }
@@ -374,7 +406,7 @@ export default function CreatorProfile({
         </header>
 
         {/* Banner */}
-        {profile.bannerImage ? (
+        {profile.bannerImage && profile.bannerImage.trim() !== '' ? (
           <div 
             className="h-48 bg-cover bg-center"
             style={{
@@ -391,7 +423,7 @@ export default function CreatorProfile({
             <div className="bg-white rounded-lg shadow-lg p-8">
               <div className="flex items-start gap-6">
                 {/* Profile Image */}
-                {profile.profileImage ? (
+                {profile.profileImage && profile.profileImage.trim() !== '' ? (
                   <img
                     src={`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${profile.profileImage}`}
                     alt={profile.handle}
