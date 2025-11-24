@@ -316,8 +316,12 @@ export default function CreatorProfile({
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-          <p className="text-gray-600">Loading creator profile...</p>
+          <img 
+            src="/walrus-loading.jpg" 
+            alt="Loading..." 
+            className="w-32 h-32 object-cover rounded-full animate-bounce mx-auto shadow-lg"
+          />
+          <p className="mt-4 text-xl font-semibold text-gray-700">Loading creator profile...</p>
         </div>
       </div>
     );

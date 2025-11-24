@@ -163,8 +163,12 @@ export default function Explore() {
           {/* Loading State */}
           {loading ? (
             <div className="text-center py-12">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-              <p className="mt-4 text-gray-600">Loading creators...</p>
+              <img 
+                src="/walrus-loading.jpg" 
+                alt="Loading..." 
+                className="w-28 h-28 object-cover rounded-full animate-bounce mx-auto shadow-lg"
+              />
+              <p className="mt-4 text-xl font-semibold text-gray-700">Loading creators...</p>
             </div>
           ) : filteredCreators.length === 0 ? (
             <div className="text-center bg-white rounded-lg shadow-md p-12">

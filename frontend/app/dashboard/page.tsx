@@ -6,6 +6,7 @@ import { Transaction } from "@mysten/sui/transactions";
 import { WalletButton } from "@/components/auth/WalletButton";
 import { ContentUploader } from "@/components/creator/ContentUploader";
 import { ContentViewer } from "@/components/content/ContentViewer";
+import { LoadingWalrus } from "@/components/LoadingWalrus";
 import { PACKAGE_ID } from "@/lib/sui/config";
 import { suiClient } from "@/lib/sui/client";
 import { getUserSuiNS } from "@/lib/suins/client";
@@ -799,35 +800,7 @@ export default function Dashboard() {
   }
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <header className="bg-white border-b">
-          <div className="container mx-auto px-4 py-4">
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-4">
-                <Link href="/" className="flex items-center gap-2 text-2xl font-bold text-blue-600">
-                  <img 
-                    src="/walron.JPG" 
-                    alt="Walron Logo" 
-                    className="w-8 h-8 object-contain"
-                  />
-                  Walron
-                </Link>
-                <span className="text-gray-400">|</span>
-                <span className="text-gray-600">Creator Dashboard</span>
-              </div>
-              <WalletButton />
-            </div>
-          </div>
-        </header>
-        <div className="flex items-center justify-center min-h-[60vh]">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4" />
-            <p className="text-gray-600">Loading your profile...</p>
-          </div>
-        </div>
-      </div>
-    );
+    return <LoadingWalrus />;
   }
 
   return (
