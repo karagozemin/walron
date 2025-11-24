@@ -7,26 +7,65 @@ import { clearSessionCache } from "@/lib/seal/session-cache";
 import { clearAllContentCache } from "@/lib/cache/indexed-db-cache";
 import { getUserSuiNS, formatDisplayName } from "@/lib/suins/client";
 import { suiClient } from "@/lib/sui/client";
+import { PACKAGE_ID } from "@/lib/sui/config";
 
 export function WalletButton() {
   const account = useCurrentAccount();
   const { mutate: disconnect } = useDisconnectWallet();
   const [isOpen, setIsOpen] = useState(false);
   const [suinsName, setSuinsName] = useState<string | null>(null);
+  const [handle, setHandle] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Fetch SuiNS name when account changes
+  // Fetch SuiNS name and handle when account changes
   useEffect(() => {
     let cancelled = false;
     
     if (account?.address) {
+      // Fetch SuiNS
       getUserSuiNS(account.address, suiClient).then((name) => {
         if (!cancelled) {
           setSuinsName(name);
         }
       });
+      
+      // Fetch handle from profile
+      const fetchHandle = async () => {
+        try {
+          const events = await suiClient.queryEvents({
+            query: {
+              MoveEventType: `${PACKAGE_ID}::creator_profile::ProfileCreated`,
+            },
+            limit: 50,
+          });
+          
+          const userProfile = events.data.find(
+            (event: any) => event.parsedJson?.owner === account.address
+          );
+          
+          if (userProfile && userProfile.parsedJson) {
+            const profileId = (userProfile.parsedJson as any).profile_id;
+            const profileObj = await suiClient.getObject({
+              id: profileId,
+              options: { showContent: true },
+            });
+            
+            if (profileObj.data?.content?.dataType === "moveObject") {
+              const fields = profileObj.data.content.fields as any;
+              if (!cancelled) {
+                setHandle(fields.handle || null);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching handle:', error);
+        }
+      };
+      
+      fetchHandle();
     } else if (!cancelled) {
       setSuinsName(null);
+      setHandle(null);
     }
     
     return () => {
@@ -112,7 +151,7 @@ export function WalletButton() {
             </Link>
 
             <Link
-              href={`/creator/${account.address}`}
+              href={`/creator/${suinsName || handle || account.address}`}
               onClick={() => setIsOpen(false)}
               className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
             >

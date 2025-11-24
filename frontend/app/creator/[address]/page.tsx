@@ -388,8 +388,8 @@ export default function CreatorProfile({
           </div>
         </header>
         <div className="container mx-auto px-4 py-12 text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Creator not found</h1>
-          <p className="text-gray-600 mb-6">This creator hasn't set up their profile yet.</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">Creator not found</h1>
+          <p className="text-slate-600 dark:text-slate-400 mb-6">This creator hasn't set up their profile yet.</p>
           <Link
             href="/explore"
             className="inline-block bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition"
@@ -433,36 +433,37 @@ export default function CreatorProfile({
         {/* Banner */}
         {profile.bannerImage && profile.bannerImage.trim() !== '' ? (
           <div 
-            className="h-48 bg-cover bg-center"
+            className="h-54 bg-cover bg-center"
             style={{
               backgroundImage: `url(https://aggregator.walrus-testnet.walrus.space/v1/blobs/${profile.bannerImage})`
             }}
           />
         ) : (
-        <div className="bg-gradient-to-r from-blue-500 to-purple-600 h-48" />
+        <div className="bg-gradient-to-r from-blue-500 to-purple-600 h-64" />
         )}
 
         <div className="container mx-auto px-4">
           {/* Profile Section */}
-          <div className="relative -mt-20 mb-8">
-            <div className="bg-white rounded-lg shadow-lg p-8">
+          <section className="mb-12 mt-8">
+            <h2 className="text-2xl font-bold text-white dark:text-white mb-6">Profile</h2>
+            <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm rounded-lg shadow-lg p-8 border border-slate-100 dark:border-slate-800">
               <div className="flex items-start gap-6">
                 {/* Profile Image */}
                 {profile.profileImage && profile.profileImage.trim() !== '' ? (
                   <img
                     src={`https://aggregator.walrus-testnet.walrus.space/v1/blobs/${profile.profileImage}`}
                     alt={profile.handle}
-                    className="w-32 h-32 rounded-full object-cover border-4 border-white shadow-lg flex-shrink-0"
+                    className="w-32 h-32 rounded-full object-cover border-4 border-white dark:border-slate-800 shadow-lg flex-shrink-0"
                   />
                 ) : (
-                  <div className="w-32 h-32 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold text-4xl border-4 border-white shadow-lg">
+                  <div className="w-32 h-32 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold text-4xl border-4 border-white dark:border-slate-800 shadow-lg">
                   {profile.handle[0].toUpperCase()}
                 </div>
                 )}
                 
                 <div className="flex-grow">
                   <div className="flex items-center gap-3 mb-2">
-                    <h1 className="text-3xl font-bold text-gray-900">@{profile.handle}</h1>
+                    <h1 className="text-3xl font-bold text-slate-900 dark:text-white">@{profile.handle}</h1>
                     {profile.suinsName && (
                       <span className="flex items-center gap-1 bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium">
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
@@ -472,17 +473,17 @@ export default function CreatorProfile({
                       </span>
                     )}
                   </div>
-                  <p className="text-gray-600 mb-4">{profile.bio}</p>
+                  <p className="text-slate-600 dark:text-slate-300 mb-4">{profile.bio}</p>
                   
-                  <div className="flex gap-6 text-sm text-gray-600 mb-4">
+                  <div className="flex gap-6 text-sm text-slate-600 dark:text-slate-400 mb-4">
                     <div>
-                      <span className="font-semibold text-gray-900">
+                      <span className="font-semibold text-slate-900 dark:text-white">
                         {content.length}
                       </span>{" "}
                       posts
                     </div>
                     <div>
-                      <span className="font-semibold text-gray-900">
+                      <span className="font-semibold text-slate-900 dark:text-white">
                         {tiers.length}
                       </span>{" "}
                       tiers
@@ -498,12 +499,12 @@ export default function CreatorProfile({
                 </div>
               </div>
             </div>
-          </div>
+          </section>
 
           {/* Subscription Tiers */}
           {tiers.length > 0 && (
             <section className="mb-12">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">Subscription Tiers</h2>
+              <h2 className="text-2xl font-bold text-white dark:text-white mb-6">Subscription Tiers</h2>
               <div className="grid md:grid-cols-3 gap-6">
                 {tiers.map((tier) => (
                   <SubscriptionCard
@@ -519,10 +520,10 @@ export default function CreatorProfile({
 
           {/* Content Feed */}
           <section className="mb-12">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Content</h2>
+            <h2 className="text-2xl font-bold text-white dark:text-white mb-6">Content</h2>
             {content.length === 0 ? (
-              <div className="bg-white rounded-lg shadow-md p-12 text-center">
-                <p className="text-gray-600">No content posted yet.</p>
+              <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm rounded-lg shadow-md p-12 text-center border border-slate-100 dark:border-slate-800">
+                <p className="text-slate-600 dark:text-slate-400">No content posted yet.</p>
               </div>
             ) : (
               <div className="space-y-6">
@@ -553,7 +554,7 @@ export default function CreatorProfile({
                   });
 
                   return (
-                    <div key={item.id} className="bg-white rounded-lg shadow-md overflow-hidden">
+                    <div key={item.id} className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm rounded-lg shadow-md overflow-hidden border border-slate-100 dark:border-slate-800">
                       <ContentViewer
                         content={item}
                         hasAccess={hasAccess}
