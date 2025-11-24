@@ -269,8 +269,7 @@ export function ContentViewer({
             await cacheDecryptedContent(
               content.id, 
               decryptedBlob, 
-              content.requiredTierId,
-              subscriptionExpiresAt
+              content.requiredTierId
             ).catch(err => {
               console.warn("⚠️ Failed to cache content (non-fatal):", err);
             });
@@ -448,8 +447,7 @@ export function ContentViewer({
           await cacheDecryptedContent(
             content.id, 
             decryptedBlob, 
-            content.requiredTierId,
-            subscriptionExpiry || undefined // Use the expiry we already fetched
+            content.requiredTierId
           ).catch(err => {
             console.warn("⚠️ Failed to cache content (non-fatal):", err);
           });
