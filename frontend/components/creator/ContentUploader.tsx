@@ -222,13 +222,13 @@ export function ContentUploader({ profileId, tiers, onSuccess }: ContentUploader
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6 max-w-2xl mx-auto">
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Upload Content</h2>
+    <div className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm rounded-lg shadow-md p-6 max-w-2xl mx-auto border border-slate-100 dark:border-slate-800">
+      <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-6">Upload Content</h2>
       
       <div className="space-y-4">
         {/* Content Type Selector */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Content Type</label>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Content Type</label>
           <div className="flex gap-4">
             <button
               type="button"
@@ -236,7 +236,7 @@ export function ContentUploader({ profileId, tiers, onSuccess }: ContentUploader
               className={`px-4 py-2 rounded font-medium transition ${
                 contentType === 'file'
                   ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
               }`}
             >
               📎 File Upload
@@ -247,7 +247,7 @@ export function ContentUploader({ profileId, tiers, onSuccess }: ContentUploader
               className={`px-4 py-2 rounded font-medium transition ${
                 contentType === 'text'
                   ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-600'
               }`}
             >
               📝 Text Post
@@ -258,21 +258,21 @@ export function ContentUploader({ profileId, tiers, onSuccess }: ContentUploader
         {/* File Input (conditional) */}
         {contentType === 'file' && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              File <span className="text-xs text-gray-500 font-normal">(Max 5MB)</span>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              File <span className="text-xs text-slate-500 dark:text-slate-400 font-normal">(Max 5MB)</span>
             </label>
             <input
               type="file"
               onChange={handleFileChange}
-              className="w-full border border-gray-300 rounded p-2 text-gray-900 bg-white file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+              className="w-full border border-slate-300 dark:border-slate-700 rounded p-2 text-slate-900 dark:text-white bg-white dark:bg-slate-800 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 dark:file:bg-blue-900/30 file:text-blue-700 dark:file:text-blue-300 hover:file:bg-blue-100 dark:hover:file:bg-blue-900/50"
               accept="image/*,video/*,audio/*,.pdf"
             />
             {file && (
-              <p className="text-sm text-gray-600 mt-1">
+              <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
                 Selected: {file.name} ({(file.size / 1024 / 1024).toFixed(2)} MB)
               </p>
             )}
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
               Note: Encryption time depends on file size. Larger files may take longer.
             </p>
           </div>
@@ -281,18 +281,18 @@ export function ContentUploader({ profileId, tiers, onSuccess }: ContentUploader
         {/* Text Input (conditional) */}
         {contentType === 'text' && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Text Content * <span className="text-xs text-gray-500 font-normal">(Encrypted with Seal SDK)</span>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              Text Content * <span className="text-xs text-slate-500 dark:text-slate-400 font-normal">(Encrypted with Seal SDK)</span>
             </label>
             <textarea
               value={textContent}
               onChange={(e) => setTextContent(e.target.value)}
-              className="w-full border border-gray-300 rounded p-3 text-gray-900 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none font-mono text-sm"
+              className="w-full border border-slate-300 dark:border-slate-700 rounded p-3 text-slate-900 dark:text-white bg-white dark:bg-slate-800 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900/50 outline-none font-mono text-sm"
               rows={12}
               placeholder="Write your exclusive text content here...&#10;&#10;✨ This text will be encrypted with Seal SDK&#10;🔒 Only your subscribers can decrypt and read it&#10;📝 Supports plain text and markdown"
             />
             {textContent && (
-              <p className="text-sm text-gray-600 mt-1">
+              <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
                 Length: {textContent.length} characters ({(new Blob([textContent]).size / 1024).toFixed(2)} KB)
               </p>
             )}
@@ -300,22 +300,22 @@ export function ContentUploader({ profileId, tiers, onSuccess }: ContentUploader
         )}
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Title *</label>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Title *</label>
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="w-full border border-gray-300 rounded p-2 text-gray-900 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+            className="w-full border border-slate-300 dark:border-slate-700 rounded p-2 text-slate-900 dark:text-white bg-white dark:bg-slate-800 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900/50 outline-none"
             placeholder="Content title"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Description</label>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="w-full border border-gray-300 rounded p-2 text-gray-900 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+            className="w-full border border-slate-300 dark:border-slate-700 rounded p-2 text-slate-900 dark:text-white bg-white dark:bg-slate-800 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900/50 outline-none"
             rows={3}
             placeholder="Content description"
           />
@@ -327,19 +327,19 @@ export function ContentUploader({ profileId, tiers, onSuccess }: ContentUploader
               type="checkbox"
               checked={isPublic}
               onChange={(e) => setIsPublic(e.target.checked)}
-              className="rounded"
+              className="rounded border-slate-300 dark:border-slate-700"
             />
-            <span className="text-sm font-medium">Public (no encryption)</span>
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Public (no encryption)</span>
           </label>
         </div>
 
         {!isPublic && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Required Tier</label>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Required Tier</label>
                 <select
                   value={selectedTier}
                   onChange={(e) => setSelectedTier(e.target.value)}
-                  className="w-full border border-gray-300 rounded p-2 text-gray-900 bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 outline-none"
+                  className="w-full border border-slate-300 dark:border-slate-700 rounded p-2 text-slate-900 dark:text-white bg-white dark:bg-slate-800 focus:border-blue-500 dark:focus:border-blue-400 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900/50 outline-none"
                 >
                   <option value="">Select tier</option>
                   {tiers.map((tier) => (
@@ -352,10 +352,10 @@ export function ContentUploader({ profileId, tiers, onSuccess }: ContentUploader
         )}
 
         {uploading && (
-          <div className="bg-blue-50 border border-blue-200 rounded p-4">
+          <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded p-4">
             <div className="flex items-center gap-3">
-              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600" />
-              <span className="text-sm text-blue-800">{progress}</span>
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 dark:border-blue-400" />
+              <span className="text-sm text-blue-800 dark:text-blue-300">{progress}</span>
             </div>
           </div>
         )}
@@ -363,7 +363,7 @@ export function ContentUploader({ profileId, tiers, onSuccess }: ContentUploader
         <button
           onClick={handleUpload}
           disabled={uploading || (contentType === 'file' ? !file : !textContent.trim()) || !title}
-          className="w-full bg-blue-600 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
+          className="w-full bg-blue-600 dark:bg-blue-500 text-white py-3 rounded-lg font-semibold hover:bg-blue-700 dark:hover:bg-blue-600 disabled:bg-slate-300 dark:disabled:bg-slate-700 disabled:cursor-not-allowed transition"
         >
           {uploading ? "Uploading..." : contentType === 'text' ? "Publish Text Post" : "Upload Content"}
         </button>
