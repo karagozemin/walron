@@ -433,13 +433,13 @@ export default function CreatorProfile({
         {/* Banner */}
         {profile.bannerImage && profile.bannerImage.trim() !== '' ? (
           <div 
-            className="h-54 bg-cover bg-center"
+            className="h-48 bg-cover bg-center"
             style={{
               backgroundImage: `url(https://aggregator.walrus-testnet.walrus.space/v1/blobs/${profile.bannerImage})`
             }}
           />
         ) : (
-        <div className="bg-gradient-to-r from-blue-500 to-purple-600 h-64" />
+        <div className="bg-gradient-to-r from-blue-500 to-purple-600 h-48" />
         )}
 
         <div className="container mx-auto px-4">
