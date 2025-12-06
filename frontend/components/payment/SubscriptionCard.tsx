@@ -17,9 +17,10 @@ interface SubscriptionCardProps {
   };
   profileId: string;
   isSubscribed?: boolean;
+  onSubscribe?: () => void; // Callback when subscription succeeds
 }
 
-export function SubscriptionCard({ tier, profileId, isSubscribed }: SubscriptionCardProps) {
+export function SubscriptionCard({ tier, profileId, isSubscribed, onSubscribe }: SubscriptionCardProps) {
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
   const [subscribing, setSubscribing] = useState(false);
 
@@ -86,9 +87,17 @@ export function SubscriptionCard({ tier, profileId, isSubscribed }: Subscription
               console.log("⏳ Waiting for indexing (5 seconds)...");
               await new Promise(resolve => setTimeout(resolve, 5000));
               
-              console.log("✅ Reloading page to show new subscription...");
+              console.log("✅ Subscription successful! Notifying parent component...");
+              
+              // Notify parent component to refresh subscriptions
+              if (onSubscribe) {
+                onSubscribe();
+              }
+              
               alert("Successfully subscribed! Content will unlock now.");
-              window.location.reload();
+              
+              // Reload page as fallback (in case callback doesn't work)
+              setTimeout(() => window.location.reload(), 2000);
             } catch (waitError) {
               console.error("❌ Error waiting for transaction:", waitError);
               alert("Subscribed, but please refresh manually to see changes.");

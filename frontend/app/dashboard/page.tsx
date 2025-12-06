@@ -314,8 +314,9 @@ export default function Dashboard() {
       console.log("📤 Uploading to Walrus:", file.name, `(${(file.size / 1024).toFixed(2)} KB)`);
       
       // Use the CORRECT Walrus publisher endpoint with epochs parameter
+      // epochs=30 means content will be stored for 30 epochs (much longer than epochs=1)
       const publisherUrl = "https://publisher.walrus-testnet.walrus.space";
-      const numEpochs = 1;
+      const numEpochs = 30;
       const walrusUrl = `${publisherUrl}/v1/blobs?epochs=${numEpochs}`;
       console.log("🌐 Walrus URL:", walrusUrl);
       

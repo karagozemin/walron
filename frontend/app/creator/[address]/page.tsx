@@ -266,7 +266,7 @@ export default function CreatorProfile({
     }
   };
 
-  const checkUserSubscriptions = async () => {
+  const checkUserSubscriptions = async (retryCount = 0) => {
     if (!currentAccount?.address) {
       console.log("⚠️ No wallet connected, skipping subscription check");
       return;
@@ -278,7 +278,7 @@ export default function CreatorProfile({
     }
 
     try {
-      console.log("🔍 Checking subscriptions for:", currentAccount.address);
+      console.log(`🔍 Checking subscriptions for: ${currentAccount.address} (attempt ${retryCount + 1})`);
       console.log("📦 Using PACKAGE_ID:", PACKAGE_ID);
       console.log("🎯 Looking for subscriptions to tiers:", tiers.map(t => ({
         id: t.id.slice(0, 10) + '...',
@@ -332,15 +332,37 @@ export default function CreatorProfile({
         }
       });
 
+      const previousSize = userSubscribedTiers.size;
       setUserSubscribedTiers(userTierIds);
       console.log("✅ User subscribed to tiers:", Array.from(userTierIds).map(id => id.slice(0, 10) + '...'));
       console.log("📊 Total subscriptions found:", userTierIds.size);
       
+      // If subscriptions changed, log it
+      if (userTierIds.size !== previousSize) {
+        console.log(`🔄 Subscription count changed: ${previousSize} → ${userTierIds.size}`);
+      }
+      
       if (userTierIds.size === 0 && subscriptionCount === 0) {
         console.log("ℹ️ No subscriptions found for this user");
+        
+        // Retry if this was called after subscribe (retryCount < 3)
+        if (retryCount < 3) {
+          console.log(`⏳ Retrying subscription check in 3 seconds... (${retryCount + 1}/3)`);
+          setTimeout(() => {
+            checkUserSubscriptions(retryCount + 1);
+          }, 3000);
+        }
       }
     } catch (error) {
       console.error("❌ Error checking subscriptions:", error);
+      
+      // Retry on error if retryCount < 3
+      if (retryCount < 3) {
+        console.log(`⏳ Retrying subscription check after error in 3 seconds... (${retryCount + 1}/3)`);
+        setTimeout(() => {
+          checkUserSubscriptions(retryCount + 1);
+        }, 3000);
+      }
     }
   };
 
@@ -512,6 +534,7 @@ export default function CreatorProfile({
                     tier={tier}
                     profileId={profile.id}
                     isSubscribed={userSubscribedTiers.has(tier.id)}
+                    onSubscribe={checkUserSubscriptions}
                   />
                 ))}
               </div>
